@@ -58,3 +58,14 @@ func TestNeighboringRequestsHaveOverlappingHalos(t *testing.T) {
 		t.Fatalf("no seam overlap: %s %s", a, b)
 	}
 }
+
+func TestBuildGridURLAtDate(t *testing.T) {
+	b := geo.Bounds{West: -123, East: -122, South: 37, North: 38}
+	u, e := BuildGridURLAt("https://example.org/erddap/griddap/jplMURSST41.csv0", b, 180, "2026-09-25")
+	if e != nil || !strings.Contains(u, "2026-09-25T09:00:00Z") {
+		t.Fatalf("historical URL %q %v", u, e)
+	}
+	if _, e := BuildGridURLAt("https://example.org/erddap/griddap/jplMURSST41.csv0", b, 180, "not-a-day"); e == nil {
+		t.Fatal("invalid date accepted")
+	}
+}

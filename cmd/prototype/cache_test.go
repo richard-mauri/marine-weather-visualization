@@ -76,3 +76,22 @@ func TestCooldownAndCounters(t *testing.T) {
 		t.Fatalf("bad stats: %v", stat)
 	}
 }
+
+func TestDatedCacheIsolation(t *testing.T) {
+	var count atomic.Int32
+	c := newGridStore(func(ctx context.Context, b geo.Bounds) (sst.Grid, error) {
+		count.Add(1)
+		day, _ := ctx.Value(dateContextKey{}).(string)
+		return sst.Grid{Timestamp: day, Points: []sst.Point{{Lat: 37.5, Lon: -122.5, Temp: 18}}}, nil
+	})
+	b := geo.Bounds{West: -122.6, South: 37.4, East: -122.3, North: 37.7}
+	for _, day := range []string{"2026-09-20", "2026-09-21", "2026-09-20"} {
+		g, _, err := c.getDated(context.Background(), b, false, day)
+		if err != nil || g.Timestamp != day {
+			t.Fatalf("date %s returned %q: %v", day, g.Timestamp, err)
+		}
+	}
+	if count.Load() != 2 {
+		t.Fatalf("upstream calls=%d want 2", count.Load())
+	}
+}

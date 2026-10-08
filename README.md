@@ -202,3 +202,29 @@ The magenta SST mask edge is now traced from the final PNG alpha in the browser 
 ## v0.4.7 coastline diagnostic cleanup
 
 The cyan polygon-derived shoreline diagnostic now infers geographic crop bounds from polygon coordinates when older `data/land.geojson` files have no `bbox` property. Straight segments on the cropping rectangle are excluded even when the original source boundary has many shorter segments. This change affects only the cyan reference overlay. The SST renderer, nearshore estimate, alpha-edge diagnostic, and upstream caching remain unchanged.
+
+
+## v0.4.8 — historical SST frames
+The time control anchors a rolling 30-day window to the timestamp actually returned by NOAA. Selecting a prior day requests its ERDDAP analysis timestamp and isolates cache entries by analysis date. The fixed Celsius color scale is retained across playback. The server rejects responses whose date does not match the requested frame. Historical playback is not a forecast. The 2-request upstream limit still applies. If NOAA lacks a requested day, the tile displays an error rather than showing another day's observations.
+
+## v0.4.9 — buffered historical playback (test candidate)
+
+Historical SST now uses complete-frame browser buffering rather than clearing the map on every date change. The existing frame stays visible while new date-specific tiles download and decode; the application switches when the complete frame is ready. Up to 12 completed frames for the current map view are retained in a browser-side least-recently-used cache. Rewinding through retained dates should require no additional SST tile downloads. Playback opportunistically prefetches the following day. A manual map pan/zoom invalidates those browser buffers; Go's existing date-specific server cache continues to function as before. Speed settings govern the interval between **ready** frames; NOAA downloads can delay progress. The server-side SST rendering, nearshore interpolation, request limiter and cache are unchanged. This is a testing candidate; Safari/NOAA playback behavior still requires local verification.
+
+
+## v0.4.11 — explicit historical SST rendering (test candidate)
+
+The historical 30-day slider now **selects** a date without fetching SST data. Click **Render SST** to request and display the selected analysis. **Latest** only moves the selector to the most recent analysis and does not issue a request. The displayed date is labeled separately from the selected date. Automatic playback, speed controls, and background date prefetch are removed. The existing complete-frame swapping and bounded in-browser frame cache remain; map navigation still reloads the currently applied analysis for the new view. Existing SST masking, nearshore filling, NOAA request limits, and other diagnostics are unchanged.
+
+## v0.4.11 tile-loading diagnostics
+
+Historical SST remains an explicit-render workflow. The loading-progress counter reports prepared PNG tiles, and the optional Loading outlines overlay marks tile footprints amber while pending, green after successful decode, and red on failure. The currently displayed SST frame stays visible until the replacement is complete. Obsolete HTTP requests canceled by navigation or date changes are not reported as NOAA server failures.
+
+## v0.4.13 — progressive historical SST rendering
+
+The date slider continues to stage a date without issuing requests; **Render SST** starts loading it. Each validated and decoded tile is immediately placed on the map. Tiles for the previously displayed date remain underneath until the requested frame finishes, so the map is temporarily a mix of dates while loading. The SST status panel explicitly identifies this mixed-date condition. After a complete successful load, the prior frame is removed. On failure or cancellation, partially rendered new tiles are removed and the previously complete frame remains. The optional loading outlines and progress counter still indicate per-tile status. No automatic playback or prefetching was added.
+
+
+## v0.4.13 — Stable historical SST controls
+
+The two-row historical SST control uses reserved grid positions and fixed-size buttons, so selected-date and loading-progress text never reflows the slider or Render SST button. On narrow screens the timeline scrolls horizontally rather than wrapping. Progressive tile-by-tile SST rendering and explicit Render SST behavior remain unchanged.

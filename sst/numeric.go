@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/richard-mauri/marine-weather-visualization/geo"
 )
@@ -41,6 +42,11 @@ const (
 )
 
 func BuildGridURL(endpoint string, b geo.Bounds, maxCells int) (string, error) {
+	return BuildGridURLAt(endpoint, b, maxCells, "")
+}
+
+// BuildGridURLAt selects a specific daily analysis (YYYY-MM-DD) or the latest timestep.
+func BuildGridURLAt(endpoint string, b geo.Bounds, maxCells int, day string) (string, error) {
 	if err := b.Validate(); err != nil {
 		return "", err
 	}
@@ -64,7 +70,15 @@ func BuildGridURL(endpoint string, b geo.Bounds, maxCells int) (string, error) {
 	if south >= north || west >= east {
 		return "", fmt.Errorf("tile outside MUR SST grid domain")
 	}
-	expr := fmt.Sprintf("analysed_sst[(last)][(%.3f):%d:(%.3f)][(%.3f):%d:(%.3f)]", south, stride, north, west, stride, east)
+	axis := "last"
+	if day != "" {
+		d, err := time.Parse("2006-01-02", day)
+		if err != nil || d.Format("2006-01-02") != day {
+			return "", fmt.Errorf("invalid SST date")
+		}
+		axis = day + "T09:00:00Z"
+	}
+	expr := fmt.Sprintf("analysed_sst[(%s)][(%.3f):%d:(%.3f)][(%.3f):%d:(%.3f)]", axis, south, stride, north, west, stride, east)
 	u.RawQuery = expr
 	return u.String(), nil
 }
@@ -106,7 +120,11 @@ func ParseGrid(r io.Reader) (Grid, error) {
 	return g, nil
 }
 func FetchGrid(ctx context.Context, client *http.Client, endpoint string, b geo.Bounds, maxCells int) (Grid, error) {
-	u, err := BuildGridURL(endpoint, b, maxCells)
+	return FetchGridAt(ctx, client, endpoint, b, maxCells, "")
+}
+
+func FetchGridAt(ctx context.Context, client *http.Client, endpoint string, b geo.Bounds, maxCells int, day string) (Grid, error) {
+	u, err := BuildGridURLAt(endpoint, b, maxCells, day)
 	if err != nil {
 		return Grid{}, err
 	}
@@ -129,7 +147,14 @@ func FetchGrid(ctx context.Context, client *http.Client, endpoint string, b geo.
 		log.Printf("ERDDAP non-200 status=%d bounds=%.3f,%.3f,%.3f,%.3f path=%s response=%q", resp.StatusCode, b.West, b.South, b.East, b.North, req.URL.Path, safe)
 		return Grid{}, fmt.Errorf("ERDDAP returned HTTP %d for geographic bounds %.2f,%.2f to %.2f,%.2f (see server log)", resp.StatusCode, b.West, b.South, b.East, b.North)
 	}
-	return ParseGrid(io.LimitReader(resp.Body, 8<<20))
+	grid, err := ParseGrid(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return grid, err
+	}
+	if day != "" && !strings.HasPrefix(grid.Timestamp, day) {
+		return Grid{}, fmt.Errorf("NOAA returned SST date %q, requested %s", grid.Timestamp, day)
+	}
+	return grid, nil
 }
 func merc(lat float64) float64 {
 	rad := clamp(lat, -85, 85) * math.Pi / 180

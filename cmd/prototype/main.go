@@ -5,6 +5,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"image"
@@ -28,12 +29,20 @@ import (
 //go:embed index.html leaflet-local.css coastline.geojson
 var content embed.FS
 
-const version = "0.4.4"
+const version = "0.4.13"
 
 var diagnosticGeoJSON []byte
 var shorelineGeoJSON []byte
 
 // Allowed spans must match the browser's multiresolution tile pyramid.
+func validAnalysisDate(day string) bool {
+	if day == "" {
+		return true
+	}
+	d, e := time.Parse("2006-01-02", day)
+	return e == nil && d.Format("2006-01-02") == day && !d.After(time.Now().UTC().Add(24*time.Hour))
+}
+
 func validTileSpan(span int) bool {
 	switch span {
 	case 1, 2, 4, 8, 16, 32, 64, 128:
@@ -86,9 +95,19 @@ func bucketBounds(b geo.Bounds) geo.Bounds {
 	const bucket = .2
 	return geo.Bounds{West: math.Floor(b.West/bucket) * bucket, South: math.Floor(b.South/bucket) * bucket, East: math.Ceil(b.East/bucket) * bucket, North: math.Ceil(b.North/bucket) * bucket}
 }
+
+type dateContextKey struct{}
+
 func (c *gridStore) get(ctx context.Context, b geo.Bounds, force bool) (sst.Grid, string, error) {
+	return c.getDated(ctx, b, force, "")
+}
+
+func (c *gridStore) getDated(ctx context.Context, b geo.Bounds, force bool, day string) (sst.Grid, string, error) {
+	if day != "" {
+		ctx = context.WithValue(ctx, dateContextKey{}, day)
+	}
 	b = bucketBounds(b)
-	key := fmt.Sprintf("%.2f/%.2f/%.2f/%.2f", b.West, b.South, b.East, b.North)
+	key := fmt.Sprintf("%s/%.2f/%.2f/%.2f/%.2f", day, b.West, b.South, b.East, b.North)
 	c.mu.Lock()
 	old, has := c.entries[key]
 	if has && !force && time.Since(old.stored) < c.ttl {
@@ -242,7 +261,8 @@ func handler(endpoint string, client *http.Client) http.Handler {
 
 func handlerWithMask(endpoint string, client *http.Client, mask *sst.LandMask) http.Handler {
 	store := newGridStore(func(ctx context.Context, b geo.Bounds) (sst.Grid, error) {
-		return sst.FetchGrid(ctx, client, endpoint, b, 180)
+		day, _ := ctx.Value(dateContextKey{}).(string)
+		return sst.FetchGridAt(ctx, client, endpoint, b, 180, day)
 	})
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/sst-cache/status", func(w http.ResponseWriter, r *http.Request) {
@@ -308,7 +328,12 @@ func handlerWithMask(endpoint string, client *http.Client, mask *sst.LandMask) h
 			http.Error(w, "unsupported extent or dimensions: zoom closer", 400)
 			return
 		}
-		grid, cacheState, err := store.get(r.Context(), b, q.Get("refresh") == "1")
+		day := q.Get("date")
+		if !validAnalysisDate(day) {
+			http.Error(w, "invalid SST analysis date", http.StatusBadRequest)
+			return
+		}
+		grid, cacheState, err := store.getDated(r.Context(), b, q.Get("refresh") == "1", day)
 		if err != nil {
 			http.Error(w, "numerical SST unavailable: "+err.Error(), 502)
 			return
@@ -333,6 +358,11 @@ func handlerWithMask(endpoint string, client *http.Client, mask *sst.LandMask) h
 	})
 	mux.HandleFunc("/api/sst-tile", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
+		day := q.Get("date")
+		if !validAnalysisDate(day) {
+			http.Error(w, "invalid SST analysis date", http.StatusBadRequest)
+			return
+		}
 		span, err := strconv.Atoi(q.Get("span"))
 		if err != nil || !validTileSpan(span) {
 			http.Error(w, "invalid tile span", http.StatusBadRequest)
@@ -381,8 +411,13 @@ func handlerWithMask(endpoint string, client *http.Client, mask *sst.LandMask) h
 			left := int(math.Round((cursor - west) / (east - west) * float64(pixels)))
 			right := int(math.Round((segmentEnd - west) / (east - west) * float64(pixels)))
 			if right > left {
-				grid, state, fetchErr := store.get(r.Context(), dataBounds, q.Get("refresh") == "1")
+				grid, state, fetchErr := store.getDated(r.Context(), dataBounds, q.Get("refresh") == "1", day)
 				if fetchErr != nil {
+					// Browser navigation or date changes intentionally cancel obsolete tile requests.
+					// Do not log these as upstream failures or return a misleading 502.
+					if errors.Is(fetchErr, context.Canceled) || errors.Is(r.Context().Err(), context.Canceled) {
+						return
+					}
 					if !strings.Contains(fetchErr.Error(), "no valid numerical SST samples") {
 						log.Printf("SST wrapped tile failure span=%d x=%d y=%d dataBounds=%.4f,%.4f,%.4f,%.4f: %v", span, x, y, dataWest, south, dataEast, north, fetchErr)
 						http.Error(w, "SST tile unavailable: "+fetchErr.Error(), 502)
@@ -443,7 +478,12 @@ func handlerWithMask(endpoint string, client *http.Client, mask *sst.LandMask) h
 			http.Error(w, "zoom closer", 400)
 			return
 		}
-		grid, cacheState, err := store.get(r.Context(), b, false)
+		day := q.Get("date")
+		if !validAnalysisDate(day) {
+			http.Error(w, "invalid SST analysis date", http.StatusBadRequest)
+			return
+		}
+		grid, cacheState, err := store.getDated(r.Context(), b, false, day)
 		if err != nil {
 			http.Error(w, err.Error(), 502)
 			return

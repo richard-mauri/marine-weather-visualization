@@ -23,7 +23,7 @@ func TestTileValidationAndServerVersion(t *testing.T) {
 		if r.Code != tc.code {
 			t.Errorf("%s: %d, want %d", tc.url, r.Code, tc.code)
 		}
-		if tc.url == "/api/health" && !strings.Contains(r.Body.String(), "0.4.4") {
+		if tc.url == "/api/health" && !strings.Contains(r.Body.String(), "0.4.13") {
 			t.Errorf("health wrong version: %s", r.Body.String())
 		}
 	}
