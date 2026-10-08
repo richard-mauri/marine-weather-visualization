@@ -1,0 +1,273 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Marine Raster Prototype v0.4.7</title><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyo0SS+HM3erY=" crossorigin=""><link rel="stylesheet" href="/leaflet-local.css"><style>
+html,body{height:100%;margin:0;font-family:system-ui,Arial,sans-serif;color:#15334d}body{display:flex;flex-direction:column}header{box-sizing:border-box;padding:12px 18px;background:#102d43;color:#fff;display:flex;align-items:center;gap:16px;flex-wrap:wrap}h1{font-size:20px;margin:0}header label{white-space:nowrap}header label.unavailable{opacity:.55;cursor:not-allowed}#coast-diagnostic:disabled{cursor:not-allowed}header small{color:#b9d2e5}button{padding:7px 12px;cursor:pointer}main{flex:1;min-height:300px;position:relative}#map{height:100%;width:100%}#info{touch-action:auto;position:absolute;z-index:600;bottom:15px;left:13px;max-width:min(340px,calc(100% - 50px));background:#ffffffee;box-shadow:0 2px 12px #0002;border-radius:8px;padding:11px 14px;font-size:13px;line-height:1.4}#status{font-weight:700}#error{color:#a22;overflow-wrap:anywhere;max-height:70px;overflow:auto}#info.collapsed .info-body{display:none}#info-title{cursor:grab;user-select:none;touch-action:none;display:flex;align-items:center;justify-content:space-between;gap:10px}#info-collapse{padding:2px 8px;font-size:12px} .legend{display:none;margin-top:8px}.ramp{height:12px;border-radius:4px;background:linear-gradient(90deg,#35388f,#2579b7,#33bfa7,#a6d96a,#f7d34b,#e57939,#b51d39)}.ticks{display:flex;justify-content:space-between;font-size:11px;color:#445}.muted{color:#445}.warning{margin-top:6px;font-size:11px;color:#6a4523}@media(max-width:700px){h1{font-size:17px}header{gap:10px;padding:10px}#info{font-size:12px}}
+</style></head><body><header><h1>Marine Raster Prototype <small>v0.4.7</small></h1><label><input type="checkbox" id="sst"> SST (JPL MUR)</label><button id="reload">Refresh SST</button><label title="Requires verified land polygons in data/land.geojson or SST_LAND_GEOJSON"><input type="checkbox" id="coast-diagnostic"> Coastline diagnostic</label><label title="Magenta vector line traces final SST PNG alpha boundary at a fixed screen-pixel width (including source no-data); cyan is the independent coastline"><input type="checkbox" id="mask-edge"> SST mask edge</label><label title="Show geographic tile footprints and exclusion reasons"><input type="checkbox" id="tile-grid"> SST tile grid</label><small>San Francisco Bay · pan and zoom</small></header><main><div id="map"></div><section id="info"><div id="info-title"><strong>SST status</strong><button id="info-collapse" type="button" aria-expanded="true">Hide details</button></div><div class="info-body"><div id="status">Base map ready. Enable SST to load NOAA data.</div><div id="error" role="status"></div><div id="tile-selected" role="status" aria-live="polite" style="display:none;margin-top:8px;padding:8px;border:1px solid #8ca3b4;border-radius:5px;background:#f1f6fa;white-space:pre-wrap;font:12px ui-monospace,monospace;overflow-wrap:anywhere"></div><div id="tile-diagnostic" class="muted" style="display:none;max-height:175px;overflow:auto;white-space:pre-wrap;font:11px ui-monospace,monospace;margin-top:8px"></div><div class="muted" id="source">JPL MUR SST · numerical values in °C · actual data time requested</div><div class="legend" id="legend"><strong>Numerical SST · fixed Celsius scale</strong><div class="ramp"></div><div class="ticks"><span>5°C / 41°F</span><span>17.5°C / 63.5°F</span><span>30°C / 86°F</span></div></div><div class="warning" id="coast-note">Coastline: checking for configured land polygons… </div><div class="warning">Nearshore estimates (within 0.018 degrees of available SST) appear at reduced opacity; other no-data regions remain transparent. Source-level raster land masking may still bleed inland. Precise shoreline clipping is unavailable unless a verified land polygon dataset is configured. Satellite SST is not a Delta channel-temperature measurement.</div></div></section></main><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script><script>
+const map=L.map('map',{preferCanvas:true}).setView([37.82,-122.25],10);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);setTimeout(()=>map.invalidateSize({pan:false}),150);addEventListener('resize',()=>map.invalidateSize({pan:false}));
+let coastLayer=null;const diagnosticMinZoom=7;
+const infoPanel=document.getElementById('info'),infoCollapse=document.getElementById('info-collapse');
+let draggedPanel=false;
+const panelPosition={left:null,top:null};
+function boundPanel(){
+ if(panelPosition.left===null)return;
+ const frame=infoPanel.parentElement.getBoundingClientRect();
+ panelPosition.left=Math.max(0,Math.min(panelPosition.left,frame.width-infoPanel.offsetWidth));
+ panelPosition.top=Math.max(0,Math.min(panelPosition.top,frame.height-infoPanel.offsetHeight));
+ infoPanel.style.left=panelPosition.left+'px';infoPanel.style.top=panelPosition.top+'px';
+ infoPanel.style.right='auto';infoPanel.style.bottom='auto';
+}
+function resetPanel(){panelPosition.left=null;panelPosition.top=null;infoPanel.style.left='13px';infoPanel.style.top='auto';infoPanel.style.right='auto';infoPanel.style.bottom='15px';}
+let drag=null;
+document.getElementById('info-title').addEventListener('pointerdown',ev=>{
+ if(ev.target.closest('button')||ev.button!==0)return;
+ const r=infoPanel.getBoundingClientRect(),m=infoPanel.parentElement.getBoundingClientRect();
+ panelPosition.left=r.left-m.left;panelPosition.top=r.top-m.top;
+ drag={id:ev.pointerId,x:ev.clientX,y:ev.clientY,left:panelPosition.left,top:panelPosition.top};
+ ev.currentTarget.setPointerCapture(ev.pointerId);ev.preventDefault();
+});
+document.getElementById('info-title').addEventListener('pointermove',ev=>{
+ if(!drag||drag.id!==ev.pointerId)return;
+ panelPosition.left=drag.left+ev.clientX-drag.x;panelPosition.top=drag.top+ev.clientY-drag.y;
+ boundPanel();
+});
+function endDrag(ev){if(drag&&drag.id===ev.pointerId)drag=null;}
+document.getElementById('info-title').addEventListener('pointerup',endDrag);
+document.getElementById('info-title').addEventListener('pointercancel',endDrag);
+document.getElementById('info-title').addEventListener('dblclick',ev=>{if(!ev.target.closest('button'))resetPanel();});
+addEventListener('resize',boundPanel);
+infoCollapse.addEventListener('click',()=>{const collapsed=infoPanel.classList.toggle('collapsed');infoCollapse.textContent=collapsed?'Show details':'Hide details';infoCollapse.setAttribute('aria-expanded',String(!collapsed));boundPanel();});
+function syncDiagnosticVisibility(){if(coastLayer){if(map.getZoom()<diagnosticMinZoom){if(map.hasLayer(coastLayer))map.removeLayer(coastLayer);}else if(coastToggle.checked&&!map.hasLayer(coastLayer)){coastLayer.addTo(map);}}}
+map.on('zoomend',syncDiagnosticVisibility);
+const coastToggle=document.getElementById('coast-diagnostic');
+async function initializeCoastlineStatus(){
+ try {
+  const r=await fetch('/api/coastline/status',{cache:'no-store'});
+  if(!r.ok)throw Error('Status endpoint returned HTTP '+r.status);
+  const data=await r.json();
+  const enabled=Boolean(data.enabled);
+  coastToggle.disabled=!enabled;
+  coastToggle.parentElement.classList.toggle('unavailable',!enabled);
+  coastToggle.parentElement.title=enabled?'Inspect loaded land polygons':'No coastline loaded. Add data/land.geojson and restart server.';
+  document.getElementById('coast-note').textContent=enabled?
+   'Coastline polygons loaded. Enable diagnostic and visually validate before trusting clipping.':
+   'Coastline diagnostic unavailable: put verified WGS84 land polygons in data/land.geojson, then restart.';
+ } catch(e) {
+  coastToggle.disabled=true;
+  document.getElementById('coast-note').textContent='Coastline status unavailable: '+String(e.message||e).slice(0,160);
+ }
+}
+initializeCoastlineStatus();
+coastToggle.addEventListener('change',async()=>{
+ if(coastLayer){map.removeLayer(coastLayer);coastLayer=null;}
+ if(!coastToggle.checked)return;
+ try{
+  const linesResponse=await fetch('/api/shoreline',{cache:'no-store'});
+  const dedicatedLines=linesResponse.ok?await linesResponse.json():null;
+  const r=await fetch('/api/coastline',{cache:'no-store'});
+  if(!r.ok)throw new Error((await r.text()).trim().slice(0,220));
+  const data=await r.json();
+  if(!coastToggle.checked)return;
+  // A cropped land polygon has artificial straight edges on the extraction box.
+  // Fill is useful for checking land classification, but diagnostic STROKES
+  // must omit segments coincident with those crop edges.
+  coastLayer=L.layerGroup().addTo(map);
+  L.geoJSON(data,{style:{stroke:false,fillColor:'#00e5ff',fillOpacity:0},interactive:false}).addTo(coastLayer);
+  if(dedicatedLines){
+    L.geoJSON(dedicatedLines,{style:{color:'#00e5ff',weight:1.5,opacity:1},interactive:false}).addTo(coastLayer);
+    syncDiagnosticVisibility();
+    document.getElementById('coast-note').textContent='Cyan vector shoreline reference; magenta SST edge traces final PNG alpha.';
+    return;
+  }
+  // Older coastline files have no bbox metadata. Recover the four geographic
+  // crop limits from polygon vertices, including fragmented crop-border edges.
+  // This affects only cyan diagnostic strokes, NEVER the land mask or SST data.
+  function polygonRings(){
+    const rings=[];
+    for(const feature of data.features||[]){
+      const g=feature.geometry||{};
+      const polygons=g.type==='Polygon'?[g.coordinates]:(g.type==='MultiPolygon'?g.coordinates:[]);
+      for(const polygon of polygons)for(const ring of polygon)rings.push(ring);
+    }
+    return rings;
+  }
+  const rings=polygonRings();
+  function inferBounds(){
+    let west=Infinity,south=Infinity,east=-Infinity,north=-Infinity;
+    for(const ring of rings)for(const point of ring){
+      if(!Array.isArray(point)||point.length<2)continue;
+      west=Math.min(west,point[0]);east=Math.max(east,point[0]);
+      south=Math.min(south,point[1]);north=Math.max(north,point[1]);
+    }
+    return Number.isFinite(west)?[west,south,east,north]:null;
+  }
+  const inferred=inferBounds();
+  const coverage=Array.isArray(data.bbox)&&data.bbox.length===4?data.bbox:inferred;
+  const tol=1e-5;
+  function onCropEdge(a,b){
+    if(!coverage)return false;
+    const [west,south,east,north]=coverage;
+    return [west,east].some(x=>Math.abs(a[0]-x)<tol&&Math.abs(b[0]-x)<tol) ||
+           [south,north].some(y=>Math.abs(a[1]-y)<tol&&Math.abs(b[1]-y)<tol);
+  }
+  function strokeRing(ring){
+    let segment=[];
+    function emit(){if(segment.length>1)L.polyline(segment,{color:'#00e5ff',weight:1.5,opacity:1,interactive:false}).addTo(coastLayer);segment=[];}
+    for(let i=1;i<ring.length;i++){
+      const a=ring[i-1],b=ring[i];
+      if(onCropEdge(a,b) || (Math.abs(a[0]-b[0])<1e-7 && Math.abs(a[1]-b[1])>.25) || (Math.abs(a[1]-b[1])<1e-7 && Math.abs(a[0]-b[0])>.25)){emit();continue;}
+      if(!segment.length)segment.push([a[1],a[0]]);
+      segment.push([b[1],b[0]]);
+    }
+    emit();
+  }
+  for(const ring of rings)strokeRing(ring);
+  syncDiagnosticVisibility();
+  document.getElementById('coast-note').textContent=Array.isArray(coverage)?
+    'Cyan vector polygon reference shown at zoom ≥7; magenta = fixed-width SST alpha vector edge. Crop-border segments filtered using geographic clipping bounds.':
+    'Magenta = polygon outlines; regenerate coastline with v0.4.7 script to suppress artificial crop boundaries.';
+ }catch(e){coastToggle.checked=false;document.getElementById('coast-note').textContent='Coastline unavailable: '+String(e.message||e).slice(0,220);}
+});
+const toggle=document.getElementById('sst'),status=document.getElementById('status'),err=document.getElementById('error'),legend=document.getElementById('legend');
+document.getElementById('mask-edge').addEventListener('change',()=>{clear();refresh(false);});
+const gridToggle=document.getElementById('tile-grid');
+const gridLayer=L.layerGroup().addTo(map);
+const gridDetail=document.getElementById('tile-diagnostic');
+let gridRecords=[];
+let selectedTileKey=null;
+const tileSelected=document.getElementById('tile-selected');
+function tileRecordKey(t){return [t.span,t.x,t.y].join(':');}
+function showSelectedTile(t){
+  if(!t){tileSelected.style.display='none';tileSelected.textContent='';return;}
+  tileSelected.style.display=gridToggle.checked?'block':'none';
+  tileSelected.textContent='Selected tile (click another rectangle to change)\n'+
+    `span: ${t.span}°    index: x=${t.x}, y=${t.y}\n`+
+    `status: ${t.reason}\n`+
+    `display: ${t.west} to ${t.east}° longitude; ${t.south} to ${t.north}° latitude`+
+    (t.reason==='requested' && (t.north>85||t.south< -85)?
+      `\nclipped to ${Math.max(-85,t.south)}..${Math.min(85,t.north)}° latitude`: '');
+  boundPanel();
+}
+function renderGrid(){
+ gridLayer.clearLayers();
+ gridDetail.style.display=gridToggle.checked?'block':'none';
+ if(!gridToggle.checked){tileSelected.style.display='none';return;}
+ const selected=gridRecords.find(t=>tileRecordKey(t)===selectedTileKey);
+ showSelectedTile(selected||null);
+ for(const t of gridRecords){
+   const color=t.reason==='requested'?'#127b4e':'#da3b2c';
+   const b=[[t.south,t.west],[t.north,t.east]];
+   if(t.north<=t.south||t.east<=t.west)continue;
+   const rect=L.rectangle(b,{color,weight:1.7,fill:false,interactive:true}).addTo(gridLayer);
+   rect.on('click',ev=>{
+     if(ev.originalEvent){L.DomEvent.stopPropagation(ev.originalEvent);}
+     selectedTileKey=tileRecordKey(t);
+     showSelectedTile(t);
+     rect.bringToFront();
+   });
+   const center=rect.getBounds().getCenter();
+   L.marker(center,{interactive:false,icon:L.divIcon({className:'',html:`<div style="font:11px monospace;color:${color};background:#ffffffd9;white-space:nowrap;display:inline-block;padding:1px 3px">${t.x},${t.y} ${t.reason==='requested'?'OK':'SKIP'}</div>`,iconSize:[1,1]})}).addTo(gridLayer);
+ }
+ gridDetail.textContent=`Tile grid: ${gridRecords.length} candidates (green=requested, red=excluded). Click a rectangle for persistent details.\n`+gridRecords.filter(t=>t.reason!=='requested').map(t=>`${t.span}° (${t.x},${t.y}) ${t.reason}: [${t.west},${t.south}] → [${t.east},${t.north}]`).join('\n');
+}
+gridToggle.addEventListener('change',renderGrid);
+let serial=0, tiles=new Map(), queue=[], inFlight=0, failures=0, completed=0, empty=0, required=0, skipped=0; const maxConcurrent=3;
+function tileProgress(){const loaded=[...tiles.values()].filter(t=>t.layer).length;const noData=[...tiles.values()].filter(t=>t.empty).length;const pending=queue.filter(j=>j.generation===serial).length + activeCurrent;status.textContent='SST coverage: '+loaded+' loaded · '+noData+' no-data · '+pending+' pending · '+failures+' failed · '+skipped+' out of range ('+required+' required)';legend.style.display=loaded?'block':'none';}
+let activeCurrent=0;
+function clear(){serial++;queue=[];for(const t of tiles.values()){if(t.layer)map.removeLayer(t.layer);if(t.edge)map.removeLayer(t.edge);if(t.url)URL.revokeObjectURL(t.url);}tiles.clear();}
+// Trace the FINAL SST PNG alpha in the browser, without modifying the SST pixels.
+// Convert pixel boundaries to EPSG:3857 positions used by Leaflet imageOverlay,
+// so the diagnostic maintains a fixed 1px stroke during zoom and pan.
+async function vectorAlphaEdge(blob,bounds){
+ const bitmap=await createImageBitmap(blob);
+ try{
+  const w=bitmap.width,h=bitmap.height;
+  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(bitmap,0,0);
+  const alpha=ctx.getImageData(0,0,w,h).data;
+  const segments=[];
+  const sw=L.CRS.EPSG3857.project(L.latLng(bounds[0][0],bounds[0][1]));
+  const ne=L.CRS.EPSG3857.project(L.latLng(bounds[1][0],bounds[1][1]));
+  const point=(x,y)=>{
+   const p=L.CRS.EPSG3857.unproject(L.point(sw.x+(ne.x-sw.x)*x/w,ne.y+(sw.y-ne.y)*y/h));
+   return [p.lat,p.lng];
+  };
+  // Only interior adjacencies: do not draw artificial lines along tile edges.
+  // Each transparent/opaque transition is emitted once as a 2-point segment.
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+   if(!alpha[4*(y*w+x)+3])continue;
+   if(!alpha[4*(y*w+x-1)+3])segments.push([point(x,y),point(x,y+1)]);
+   if(!alpha[4*(y*w+x+1)+3])segments.push([point(x+1,y),point(x+1,y+1)]);
+   if(!alpha[4*((y-1)*w+x)+3])segments.push([point(x,y),point(x+1,y)]);
+   if(!alpha[4*((y+1)*w+x)+3])segments.push([point(x,y+1),point(x+1,y+1)]);
+  }
+  if(!segments.length)return null;
+  return L.polyline(segments,{color:'#ff00ff',weight:1,opacity:1,interactive:false,smoothFactor:0});
+ }finally{bitmap.close();}
+}
+async function responseError(r){const kind=(r.headers.get('Content-Type')||'').toLowerCase();if(kind.includes('text/')||kind.includes('json'))return ('HTTP '+r.status+': '+await r.text()).slice(0,160);return 'HTTP '+r.status+' ('+(kind||'unknown type')+')';}
+function tileSpan(z, bounds){
+ const spans=[1,2,4,8,16,32,64,128];
+ let candidate=z>=8?1:(z>=6?2:4);
+ // Advance level-of-detail until viewport fits the bounded request budget.
+ for(const span of spans.filter(s=>s>=candidate)){
+  const count=(Math.floor((bounds.getEast()-1e-9)/span)-Math.floor(bounds.getWest()/span)+1)*
+    (Math.floor((bounds.getNorth()-1e-9)/span)-Math.floor(bounds.getSouth()/span)+1);
+  if(count<=30)return span;
+ }
+ return 128;
+}
+function tileKey(span,x,y,pixels){return span+':'+x+':'+y+':'+pixels;}
+async function loadTile(job){
+ const generation=job.generation;let objectURL=null;
+ try{
+  const q=new URLSearchParams({span:String(job.span),x:String(job.x),y:String(job.y),pixels:String(job.pixels)});if(job.force)q.set('refresh','1');
+  const r=await fetch('/api/sst-tile?'+q,{cache:'no-store'});
+  if(r.status===204){if(generation===serial){tiles.set(job.key,{empty:true});empty++;completed++;}return;}
+  if(!r.ok)throw Error(await responseError(r));
+  if(!(r.headers.get('Content-Type')||'').includes('image/png'))throw Error('Unexpected tile content type');
+  const blob=await r.blob();const magic=new Uint8Array(await blob.slice(0,8).arrayBuffer());
+  if(![137,80,78,71,13,10,26,10].every((v,i)=>magic[i]===v))throw Error('Invalid PNG');
+  if(generation!==serial || !toggle.checked)return;
+  objectURL=URL.createObjectURL(blob);
+  const sw=Math.max(-85,job.y*job.span), ne=Math.min(85,(job.y+1)*job.span), west=job.x*job.span,east=(job.x+1)*job.span;
+  const layer=L.imageOverlay(objectURL,[[sw,west],[ne,east]],{opacity:.8,interactive:false}).addTo(map);
+  const record={layer,url:objectURL,edge:null};
+  tiles.set(job.key,record);objectURL=null;completed++;
+  if(document.getElementById('mask-edge').checked){
+   try{
+    const edge=await vectorAlphaEdge(blob,[[sw,west],[ne,east]]);
+    if(generation===serial && tiles.get(job.key)===record && edge){record.edge=edge.addTo(map);edge.bringToFront();}
+   }catch(edgeError){console.warn('SST vector mask diagnostic unavailable',edgeError);}
+  }
+  const stamp=r.headers.get('X-SST-Time')||'unavailable';document.getElementById('source').textContent='JPL MUR SST · '+stamp+' · fixed 5–30°C legend · '+(r.headers.get('X-SST-Cache')||'');
+ }catch(e){if(generation===serial){failures++;err.textContent=String(e.message||e).slice(0,160);}}
+ finally{if(objectURL)URL.revokeObjectURL(objectURL);inFlight--;if(generation===serial){activeCurrent--;tileProgress();}pump();}
+}
+function pump(){while(inFlight<maxConcurrent && queue.length){const job=queue.shift();if(job.generation!==serial)continue;inFlight++;activeCurrent++;loadTile(job);}}
+function refresh(force=false){
+ serial++;const generation=serial;queue=[];activeCurrent=0;failures=0;completed=0;empty=0;required=0;skipped=0;err.textContent='';
+ if(!toggle.checked){clear();gridRecords=[];renderGrid();legend.style.display='none';status.textContent='SST disabled';return;}
+ const b=map.getBounds(), span=tileSpan(map.getZoom(),b);
+ const pixels=span<=2 && map.getZoom()>=9 ? 768 : (span<=4 && map.getZoom()>=7 ? 512 : 256);
+ const x0=Math.floor(b.getWest()/span),x1=Math.floor((b.getEast()-1e-9)/span);
+ const y0=Math.floor(b.getSouth()/span),y1=Math.floor((b.getNorth()-1e-9)/span);
+ const requested=new Set();const jobs=[];gridRecords=[];
+ for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+  required++;
+  const west=x*span,east=(x+1)*span,south=y*span,north=(y+1)*span;
+  const reason=south>=85?'north of SST display limit':north<=-85?'south of SST display limit':'requested';
+  gridRecords.push({span,x,y,west,east,south,north,reason});
+  if(reason!=='requested'){skipped++;continue;}
+  const key=tileKey(span,x,y,pixels);requested.add(key);
+  if(!force && tiles.has(key))continue;
+  jobs.push({span,x,y,pixels,key,generation,force});
+ }
+ renderGrid();
+ // Drop images outside the current geographic coverage. Never stretch an old
+ // rectangle across newly visible geography.
+ for(const [key,t] of tiles){if(!requested.has(key)||force){if(t.layer)map.removeLayer(t.layer);if(t.edge)map.removeLayer(t.edge);if(t.url)URL.revokeObjectURL(t.url);tiles.delete(key);}}
+ if(jobs.length>36){status.textContent='SST tile budget exceeded ('+jobs.length+' pending); zoom closer';legend.style.display=tiles.size?'block':'none';return;}
+ jobs.sort((a,b)=>{const cx=(x0+x1)/2,cy=(y0+y1)/2;return (a.x-cx)**2+(a.y-cy)**2-(b.x-cx)**2-(b.y-cy)**2;});
+ queue=jobs;completed=tiles.size;tileProgress();pump();
+}
+toggle.addEventListener('change',()=>refresh(false));document.getElementById('reload').addEventListener('click',()=>refresh(true));let debouncer;map.on('moveend zoomend',()=>{if(toggle.checked){clearTimeout(debouncer);debouncer=setTimeout(()=>refresh(false),500)}});
+</script></body></html>

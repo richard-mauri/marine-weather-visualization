@@ -1,0 +1,7 @@
+.DS_Store
+.coastline-source/
+data/land.geojson
+data/coastline.geojson
+*.log
+*.tmp
+data/land.geojson.previous
