@@ -29,7 +29,7 @@ import (
 //go:embed index.html leaflet-local.css coastline.geojson
 var content embed.FS
 
-const version = "0.4.13"
+const version = "0.4.20"
 
 var diagnosticGeoJSON []byte
 var shorelineGeoJSON []byte
@@ -457,6 +457,61 @@ func handlerWithMask(endpoint string, client *http.Client, mask *sst.LandMask) h
 		w.Header().Set("X-SST-Time", timestamp)
 		w.Header().Set("X-SST-Cache", cacheState)
 		_, _ = w.Write(buf.Bytes())
+	})
+	mux.HandleFunc("/api/sst-sample", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		lat, e1 := strconv.ParseFloat(q.Get("lat"), 64)
+		lon, e2 := strconv.ParseFloat(q.Get("lon"), 64)
+		if e1 != nil || e2 != nil || math.IsNaN(lat) || math.IsNaN(lon) || lat < -85 || lat > 85 || lon < -180 || lon > 180 {
+			http.Error(w, "invalid coordinate", 400)
+			return
+		}
+		day := q.Get("date")
+		if !validAnalysisDate(day) {
+			http.Error(w, "invalid SST analysis date", 400)
+			return
+		}
+		// Query a small area, never the entire viewport. Avoid implying that
+		// nearshore display estimates are actual satellite observations.
+		west := math.Max(-179.99, lon-0.015)
+		east := math.Min(179.99, lon+0.015)
+		south := math.Max(-85, lat-0.015)
+		north := math.Min(85, lat+0.015)
+		if west >= east || south >= north {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"available": false})
+			return
+		}
+		grid, _, err := store.getDated(r.Context(), geo.Bounds{West: west, East: east, South: south, North: north}, false, day)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(r.Context().Err(), context.Canceled) {
+				return
+			}
+			if strings.Contains(err.Error(), "no valid numerical SST samples") {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{"available": false})
+				return
+			}
+			http.Error(w, "sampling unavailable", 503)
+			return
+		}
+		closest := math.MaxFloat64
+		temperature := 0.0
+		found := false
+		for _, pt := range grid.Points {
+			d := math.Hypot((pt.Lat - lat), (pt.Lon-lon)*math.Cos(lat*math.Pi/180))
+			if d < closest {
+				closest = d
+				temperature = pt.Temp
+				found = true
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if !found || closest > 0.016 {
+			_ = json.NewEncoder(w).Encode(map[string]any{"available": false, "timestamp": grid.Timestamp})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"available": true, "celsius": temperature, "timestamp": grid.Timestamp, "type": "nearest_noaa_grid_sample"})
 	})
 	mux.HandleFunc("/api/sst-meta", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()

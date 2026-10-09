@@ -1,53 +1,65 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Marine Raster Prototype v0.4.13</title><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyo0SS+HM3erY=" crossorigin=""><link rel="stylesheet" href="/leaflet-local.css"><style>
-html,body{height:100%;margin:0;font-family:system-ui,Arial,sans-serif;color:#15334d}body{display:flex;flex-direction:column}header{box-sizing:border-box;padding:12px 18px;background:#102d43;color:#fff;display:flex;align-items:center;gap:16px;flex-wrap:wrap}h1{font-size:20px;margin:0}header label{white-space:nowrap}header label.unavailable{opacity:.55;cursor:not-allowed}#coast-diagnostic:disabled{cursor:not-allowed}header small{color:#b9d2e5}button{padding:7px 12px;cursor:pointer}main{flex:1;min-height:300px;position:relative}#map{height:100%;width:100%}#info{touch-action:auto;position:absolute;z-index:600;bottom:15px;left:13px;max-width:min(340px,calc(100% - 50px));background:#ffffffee;box-shadow:0 2px 12px #0002;border-radius:8px;padding:11px 14px;font-size:13px;line-height:1.4}#status{font-weight:700}#error{color:#a22;overflow-wrap:anywhere;max-height:70px;overflow:auto}#info.collapsed .info-body{display:none}#info-title{cursor:grab;user-select:none;touch-action:none;display:flex;align-items:center;justify-content:space-between;gap:10px}#info-collapse{padding:2px 8px;font-size:12px} .legend{display:none;margin-top:8px}.ramp{height:12px;border-radius:4px;background:linear-gradient(90deg,#35388f,#2579b7,#33bfa7,#a6d96a,#f7d34b,#e57939,#b51d39)}.ticks{display:flex;justify-content:space-between;font-size:11px;color:#445}.muted{color:#445}.warning{margin-top:6px;font-size:11px;color:#6a4523}@media(max-width:700px){h1{font-size:17px}header{gap:10px;padding:10px}#info{font-size:12px}}
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Marine Raster Prototype v0.4.20</title><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyo0SS+HM3erY=" crossorigin=""><link rel="stylesheet" href="/leaflet-local.css"><style>
+html,body{height:100%;margin:0;font-family:system-ui,Arial,sans-serif;color:#15334d}body{display:flex;flex-direction:column}header{box-sizing:border-box;padding:12px 18px;background:#102d43;color:#fff;display:flex;align-items:center;gap:16px;flex-wrap:wrap}h1{font-size:20px;margin:0}header label{white-space:nowrap}#weather-layer{font:inherit;padding:5px 8px;border-radius:5px;background:#fff;color:#15334d;max-width:240px}header label.unavailable{opacity:.55;cursor:not-allowed}#coast-diagnostic:disabled{cursor:not-allowed}header small{color:#b9d2e5}#time-details{grid-column:6;grid-row:1;width:88px}#cursor-sst{position:absolute;bottom:12px;left:12px;z-index:850;min-width:245px;max-width:75vw;background:#fffffff0;color:#15334d;padding:7px 10px;border-radius:5px;box-shadow:0 1px 6px #0004;font:12px ui-monospace,monospace;pointer-events:none}#color-style{grid-column:1 / 3;grid-row:2;display:flex;align-items:center;gap:8px;font-size:12px}#color-style select{max-width:140px}button{padding:7px 12px;cursor:pointer}main{flex:1;min-height:300px;position:relative}#map{height:100%;width:100%}#info{touch-action:auto;display:none;position:fixed;z-index:1600;top:72px;right:18px;max-width:min(340px,calc(100% - 50px));background:#ffffffee;box-shadow:0 2px 12px #0002;border-radius:8px;padding:11px 14px;font-size:13px;line-height:1.4}#status{font-weight:700}#error{color:#a22;overflow-wrap:anywhere;max-height:70px;overflow:auto}#info.open{display:block;max-height:min(75vh,680px);overflow:auto}#info.collapsed .info-body{display:none}#info-title{cursor:default;user-select:none;display:flex;align-items:center;justify-content:space-between;gap:10px}#info-collapse{padding:2px 8px;font-size:12px} .legend{display:none;margin-top:8px}.ramp{height:12px;border-radius:4px;background:linear-gradient(90deg,#35388f,#2579b7,#33bfa7,#a6d96a,#f7d34b,#e57939,#b51d39)}.ticks{display:flex;justify-content:space-between;font-size:11px;color:#445}.muted{color:#445}.warning{margin-top:6px;font-size:11px;color:#6a4523}@media(max-width:700px){h1{font-size:17px}header{gap:10px;padding:10px}#info{font-size:12px}}
 
 /* Reserved timeline grid: dynamic date and loading labels cannot reposition controls. */
-#time-control{box-sizing:border-box;display:grid;grid-template-columns:120px minmax(180px,1fr) 255px 94px 126px;grid-template-rows:38px 38px;gap:4px 10px;align-items:center;padding:6px 14px;background:#e8f0f6;color:#12334b;font:14px system-ui;overflow-x:auto;overflow-y:hidden;min-height:92px} 
+#time-control{box-sizing:border-box;display:grid;grid-template-columns:120px minmax(180px,1fr) 255px 94px 126px 88px;grid-template-rows:38px 38px;gap:4px 10px;align-items:center;padding:6px 14px;background:#e8f0f6;color:#12334b;font:14px system-ui;overflow-x:auto;overflow-y:hidden;min-height:92px} 
 #time-control>*{box-sizing:border-box;min-width:0;margin:0} 
 #time-control .time-heading{grid-column:1;grid-row:1;white-space:nowrap} 
 #time-slider{grid-column:2;grid-row:1;width:100%;align-self:center} 
 #time-label{grid-column:3;grid-row:1;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} 
 #time-latest{grid-column:4;grid-row:1;width:94px} 
 #time-render{grid-column:5;grid-row:1;width:126px} 
-#time-displayed{grid-column:2 / 4;grid-row:2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums} 
-#outline-control{grid-column:1;grid-row:2;white-space:nowrap;font-size:12px} 
-#load-progress{grid-column:4 / 6;grid-row:2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:12px ui-monospace,monospace;font-variant-numeric:tabular-nums} 
+#time-displayed{grid-column:3 / 5;grid-row:2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums} 
+ 
+#load-progress{grid-column:5 / 7;grid-row:2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:12px ui-monospace,monospace;font-variant-numeric:tabular-nums} 
 #time-control button{white-space:nowrap;height:34px;padding:5px 9px} 
-@media(max-width:960px){#time-control{grid-template-columns:120px minmax(180px,1fr) 255px 94px 126px;min-width:0}#time-control>*{min-width:0}#time-control{grid-template-columns:120px 190px 255px 94px 126px}}
-</style></head><body><header><h1>Marine Raster Prototype <small>v0.4.13</small></h1><label><input type="checkbox" id="sst"> SST (JPL MUR)</label><button id="reload">Refresh SST</button><label title="Requires verified land polygons in data/land.geojson or SST_LAND_GEOJSON"><input type="checkbox" id="coast-diagnostic"> Coastline diagnostic</label><label title="Magenta vector line traces final SST PNG alpha boundary at a fixed screen-pixel width (including source no-data); cyan is the independent coastline"><input type="checkbox" id="mask-edge"> SST mask edge</label><label title="Show geographic tile footprints and exclusion reasons"><input type="checkbox" id="tile-grid"> SST tile grid</label><small>San Francisco Bay · pan and zoom</small></header><section id="time-control" aria-label="Historical SST date controls"><strong class="time-heading">Historical SST</strong><input id="time-slider" aria-label="Select historical SST analysis date" type="range" min="0" max="29" value="29" disabled><span id="time-label" title="Selected NOAA analysis date">Finding latest NOAA analysis…</span><button id="time-latest" type="button">Latest</button><button id="time-render" type="button" disabled>Render SST</button><span id="time-displayed" aria-live="polite" title="Date currently shown on map">Displayed: none</span><label id="outline-control" title="Show pending SST tile footprints without hiding the displayed imagery"><input type="checkbox" id="load-outlines" checked> Loading outlines</label><span id="load-progress" role="status" aria-live="polite">Idle</span></section><main><div id="map"></div><section id="info"><div id="info-title"><strong>SST status</strong><button id="info-collapse" type="button" aria-expanded="true">Hide details</button></div><div class="info-body"><div id="status">Base map ready. Enable SST to load NOAA data.</div><div id="error" role="status"></div><div id="tile-selected" role="status" aria-live="polite" style="display:none;margin-top:8px;padding:8px;border:1px solid #8ca3b4;border-radius:5px;background:#f1f6fa;white-space:pre-wrap;font:12px ui-monospace,monospace;overflow-wrap:anywhere"></div><div id="tile-diagnostic" class="muted" style="display:none;max-height:175px;overflow:auto;white-space:pre-wrap;font:11px ui-monospace,monospace;margin-top:8px"></div><div class="muted" id="source">JPL MUR SST · numerical values in °C · actual data time requested</div><div class="legend" id="legend"><strong>Numerical SST · fixed Celsius scale</strong><div class="ramp"></div><div class="ticks"><span>5°C / 41°F</span><span>17.5°C / 63.5°F</span><span>30°C / 86°F</span></div></div><div class="warning" id="coast-note">Coastline: checking for configured land polygons… </div><div class="warning">Nearshore estimates (within 0.018 degrees of available SST) appear at reduced opacity; other no-data regions remain transparent. Source-level raster land masking may still bleed inland. Precise shoreline clipping is unavailable unless a verified land polygon dataset is configured. Satellite SST is not a Delta channel-temperature measurement.</div></div></section></main><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script><script>
-const map=L.map('map',{preferCanvas:true}).setView([37.82,-122.25],10);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);setTimeout(()=>map.invalidateSize({pan:false}),150);addEventListener('resize',()=>map.invalidateSize({pan:false}));
+@media(max-width:960px){#time-control{grid-template-columns:120px minmax(180px,1fr) 255px 94px 126px 88px;min-width:0}#time-control>*{min-width:0}#time-control{grid-template-columns:120px 190px 255px 94px 126px 88px}}
+#diagnostic-controls{border:1px solid #c4d4df;border-radius:6px;margin:0 0 12px;padding:8px;display:flex;flex-direction:column;align-items:flex-start;gap:7px}
+#diagnostic-controls legend{font-weight:700;padding:0 4px}
+#diagnostic-controls label{display:flex;align-items:center;gap:7px;line-height:1.3}
+#diagnostic-controls input{margin:0;flex:none}
+#time-displayed{padding-left:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#time-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#load-progress{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
+</style></head><body><header><h1>Marine Raster Prototype <small>v0.4.20</small></h1><label for="weather-layer">Weather Layer <select id="weather-layer" aria-label="Weather layer"><option value="sst" selected>SST (JPL MUR)</option><option value="swell" disabled>Swell (coming soon)</option><option value="air-temp" disabled>Air Temperature (coming soon)</option><option value="wind" disabled>Wind (coming soon)</option></select></label><input type="checkbox" id="sst" checked hidden aria-hidden="true"></header><section id="time-control" aria-label="Historical SST date controls"><strong class="time-heading">Historical SST</strong><input id="time-slider" aria-label="Select historical SST analysis date" type="range" min="0" max="29" value="29" disabled><span id="time-label" title="Selected NOAA analysis date">Finding latest NOAA analysis…</span><button id="time-latest" type="button">Latest</button><button id="time-render" type="button" disabled>Render SST</button><button id="info-open" type="button" aria-controls="info" aria-expanded="false">Details</button><label id="color-style">Color intensity <select id="sst-intensity"><option value="natural">Natural</option><option value="vivid" selected>Vivid</option><option value="high">High contrast</option></select></label><span id="time-displayed" aria-live="polite" title="Date currently shown on map">Displayed: none</span><span id="load-progress" role="status" aria-live="polite">Idle</span></section><main><div id="map"></div><div id="cursor-sst" role="status">Move cursor over SST to inspect temperature</div><section id="info"><div id="info-title"><strong>SST status</strong><button id="info-collapse" type="button" aria-expanded="true">Hide details</button></div><div class="info-body"><fieldset id="diagnostic-controls"><legend>Diagnostics</legend><label title="Requires verified land polygons in data/land.geojson or SST_LAND_GEOJSON"><input type="checkbox" id="coast-diagnostic"> Coastline diagnostic</label><label title="Magenta vector line traces final SST PNG alpha boundary at a fixed screen-pixel width (including source no-data); cyan is the independent coastline"><input type="checkbox" id="mask-edge"> SST mask edge</label><label title="Show geographic tile footprints and exclusion reasons"><input type="checkbox" id="tile-grid"> SST tile grid</label><label id="outline-control" title="Show pending SST tile footprints without hiding the displayed imagery"><input type="checkbox" id="load-outlines" checked> Loading outlines</label></fieldset><div id="status">Base map ready. Enable SST to load NOAA data.</div><div id="error" role="status"></div><div id="tile-selected" role="status" aria-live="polite" style="display:none;margin-top:8px;padding:8px;border:1px solid #8ca3b4;border-radius:5px;background:#f1f6fa;white-space:pre-wrap;font:12px ui-monospace,monospace;overflow-wrap:anywhere"></div><div id="tile-diagnostic" class="muted" style="display:none;max-height:175px;overflow:auto;white-space:pre-wrap;font:11px ui-monospace,monospace;margin-top:8px"></div><div class="muted" id="source">JPL MUR SST · numerical values in °C · actual data time requested</div><div class="legend" id="legend"><strong>Numerical SST · fixed Celsius scale</strong><div class="ramp"></div><div class="ticks"><span>5°C / 41°F</span><span>17.5°C / 63.5°F</span><span>30°C / 86°F</span></div></div><div class="warning" id="coast-note">Coastline: checking for configured land polygons… </div><div class="warning">Nearshore estimates (within 0.018 degrees of available SST) appear at reduced opacity; other no-data regions remain transparent. Source-level raster land masking may still bleed inland. Precise shoreline clipping is unavailable unless a verified land polygon dataset is configured. Satellite SST is not a Delta channel-temperature measurement.</div></div></section></main><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script><script>
+const worldBounds=L.latLngBounds([[-85.0511287798,-180],[85.0511287798,180]]);
+const map=L.map('map',{preferCanvas:true,minZoom:-2,zoomSnap:0.01,zoomDelta:1,maxBounds:worldBounds,maxBoundsViscosity:1}).setView([37.82,-122.25],10);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,minZoom:-2,minNativeZoom:0,noWrap:true,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+let worldMinZoom=0;
+function atWorldOverview(){return map.getZoom() <= worldMinZoom+0.025;}
+function updateWorldZoomLimit(){
+ const wasOverview=atWorldOverview();
+ map.invalidateSize({pan:false});
+ // Leaflet computes the maximum world that fits BOTH dimensions in EPSG:3857.
+ // The map uses a square projected world; any unavoidable margins appear on
+ // just the non-limiting axis, never on all four sides.
+ worldMinZoom=map.getBoundsZoom(worldBounds,false);
+ map.setMinZoom(worldMinZoom);
+ map.setMaxBounds(worldBounds);
+ if(wasOverview||map.getZoom()<=worldMinZoom+0.025)
+  map.setView([0,0],worldMinZoom,{animate:false});
+ else map.panInsideBounds(worldBounds,{animate:false});
+}
+function enforceOverviewBounds(){
+ if(atWorldOverview())map.panTo([0,0],{animate:false});
+}
+map.on('zoomend',enforceOverviewBounds);
+setTimeout(updateWorldZoomLimit,150);
+addEventListener('resize',updateWorldZoomLimit);
+
 let coastLayer=null;const diagnosticMinZoom=7;
 const infoPanel=document.getElementById('info'),infoCollapse=document.getElementById('info-collapse');
-let draggedPanel=false;
-const panelPosition={left:null,top:null};
-function boundPanel(){
- if(panelPosition.left===null)return;
- const frame=infoPanel.parentElement.getBoundingClientRect();
- panelPosition.left=Math.max(0,Math.min(panelPosition.left,frame.width-infoPanel.offsetWidth));
- panelPosition.top=Math.max(0,Math.min(panelPosition.top,frame.height-infoPanel.offsetHeight));
- infoPanel.style.left=panelPosition.left+'px';infoPanel.style.top=panelPosition.top+'px';
- infoPanel.style.right='auto';infoPanel.style.bottom='auto';
+function boundPanel(){} // Retained for existing tile-selection updates.
+const detailsButton=document.getElementById('info-open');
+function setDetailsOpen(open){
+ infoPanel.classList.toggle('open',open);
+ detailsButton.setAttribute('aria-expanded',String(open));
+ detailsButton.textContent=open?'Close details':'Details';
+ if(open){infoPanel.classList.remove('collapsed');infoCollapse.textContent='Hide details';infoCollapse.setAttribute('aria-expanded','true');}
 }
-function resetPanel(){panelPosition.left=null;panelPosition.top=null;infoPanel.style.left='13px';infoPanel.style.top='auto';infoPanel.style.right='auto';infoPanel.style.bottom='15px';}
-let drag=null;
-document.getElementById('info-title').addEventListener('pointerdown',ev=>{
- if(ev.target.closest('button')||ev.button!==0)return;
- const r=infoPanel.getBoundingClientRect(),m=infoPanel.parentElement.getBoundingClientRect();
- panelPosition.left=r.left-m.left;panelPosition.top=r.top-m.top;
- drag={id:ev.pointerId,x:ev.clientX,y:ev.clientY,left:panelPosition.left,top:panelPosition.top};
- ev.currentTarget.setPointerCapture(ev.pointerId);ev.preventDefault();
-});
-document.getElementById('info-title').addEventListener('pointermove',ev=>{
- if(!drag||drag.id!==ev.pointerId)return;
- panelPosition.left=drag.left+ev.clientX-drag.x;panelPosition.top=drag.top+ev.clientY-drag.y;
- boundPanel();
-});
-function endDrag(ev){if(drag&&drag.id===ev.pointerId)drag=null;}
-document.getElementById('info-title').addEventListener('pointerup',endDrag);
-document.getElementById('info-title').addEventListener('pointercancel',endDrag);
-document.getElementById('info-title').addEventListener('dblclick',ev=>{if(!ev.target.closest('button'))resetPanel();});
-addEventListener('resize',boundPanel);
-infoCollapse.addEventListener('click',()=>{const collapsed=infoPanel.classList.toggle('collapsed');infoCollapse.textContent=collapsed?'Show details':'Hide details';infoCollapse.setAttribute('aria-expanded',String(!collapsed));boundPanel();});
+detailsButton.addEventListener('click',()=>setDetailsOpen(!infoPanel.classList.contains('open')));
+infoCollapse.addEventListener('click',()=>setDetailsOpen(false));
+document.addEventListener('keydown',ev=>{if(ev.key==='Escape')setDetailsOpen(false)});
 function syncDiagnosticVisibility(){if(coastLayer){if(map.getZoom()<diagnosticMinZoom){if(map.hasLayer(coastLayer))map.removeLayer(coastLayer);}else if(coastToggle.checked&&!map.hasLayer(coastLayer)){coastLayer.addTo(map);}}}
 map.on('zoomend',syncDiagnosticVisibility);
 const coastToggle=document.getElementById('coast-diagnostic');
@@ -140,6 +152,7 @@ coastToggle.addEventListener('change',async()=>{
  }catch(e){coastToggle.checked=false;document.getElementById('coast-note').textContent='Coastline unavailable: '+String(e.message||e).slice(0,220);}
 });
 const toggle=document.getElementById('sst'),status=document.getElementById('status'),err=document.getElementById('error'),legend=document.getElementById('legend');
+const weatherLayer=document.getElementById('weather-layer');weatherLayer.addEventListener('change',()=>{if(weatherLayer.value!=='sst'){weatherLayer.value='sst';return;}toggle.checked=true;toggle.dispatchEvent(new Event('change'));});
 
 const gridToggle=document.getElementById('tile-grid');
 const gridLayer=L.layerGroup().addTo(map);
@@ -188,6 +201,9 @@ const timeSlider=document.getElementById('time-slider'),timeLabel=document.getEl
 const renderButton=document.getElementById('time-render'),displayedLabel=document.getElementById('time-displayed');
 let latestAnalysisDay='',selectedDay='',appliedDay='',viewGeneration=0;
 const frameCache=new Map(),maxFrames=12;
+const intensity=document.getElementById('sst-intensity');
+function applyIntensity(layer){if(!layer)return;const el=layer.getElement();if(!el)return;const mode=intensity.value;el.style.filter=mode==='natural'?'none':mode==='vivid'?'saturate(1.45) contrast(1.06)':'saturate(1.7) contrast(1.25)';}
+intensity.addEventListener('change',()=>{for(const frame of frameCache.values())for(const record of frame.tiles)applyIntensity(record.layer);if(window.pendingSSTFrame)for(const record of window.pendingSSTFrame.tiles)applyIntensity(record.layer);});
 let visibleFrame=null,desiredFrameKey='',frameController=null;
 let failures=0,required=0,skipped=0;
 const maxConcurrent=3;
@@ -206,17 +222,17 @@ function utcDayOffset(day,offset){const d=new Date(day+'T12:00:00Z');d.setUTCDat
 function targetDay(){return appliedDay||latestAnalysisDay||'latest'}
 function stagedDay(){return selectedDay||latestAnalysisDay||'latest'}
 function receiveSSTTimestamp(stamp){if(!stamp||stamp==='unavailable')return;const day=stamp.slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return;if(!latestAnalysisDay){latestAnalysisDay=day;timeSlider.disabled=false;updateTimeLabel();}}
-function updateTimeLabel(){const day=stagedDay();timeLabel.textContent=day==='latest'?'Finding latest NOAA analysis…':'Selected: '+day;renderButton.disabled=!latestAnalysisDay||!toggle.checked||(day===targetDay()&&visibleFrame&&visibleFrame.day===targetDay());displayedLabel.textContent='Displayed: '+(visibleFrame?(visibleFrame.stamp||visibleFrame.day||targetDay()):'none')+(day!==targetDay()?' · selection not rendered':'');}
+function updateTimeLabel(){const day=stagedDay();timeLabel.textContent=day==='latest'?'Finding latest NOAA analysis…':'Selected: '+day;renderButton.disabled=!latestAnalysisDay||!toggle.checked;displayedLabel.textContent='Displayed: '+(visibleFrame?(visibleFrame.stamp||visibleFrame.day||targetDay()):'none')+(day!==targetDay()?' · selection not rendered':'');}
 function cancelPending(){if(frameController){frameController.abort();frameController=null;}clearLoading();}
-function disposeFrame(frame){if(frame.visible)for(const r of frame.tiles){if(r.layer)map.removeLayer(r.layer);if(r.edge)map.removeLayer(r.edge);}frame.visible=false;for(const r of frame.tiles)if(r.url)URL.revokeObjectURL(r.url);}
+function disposeFrame(frame){if(frame.hiddenPrior&&visibleFrame&&frame!==visibleFrame)for(const prior of frame.hiddenPrior){if(prior.layer&&!map.hasLayer(prior.layer)){prior.layer.addTo(map);applyIntensity(prior.layer);}}if(frame.visible)for(const r of frame.tiles){if(r.layer)map.removeLayer(r.layer);if(r.edge)map.removeLayer(r.edge);}frame.visible=false;for(const r of frame.tiles)if(r.url)URL.revokeObjectURL(r.url);}
 function hideFrame(frame){if(!frame||!frame.visible)return;for(const r of frame.tiles){if(r.layer)map.removeLayer(r.layer);if(r.edge)map.removeLayer(r.edge);}frame.visible=false;}
-function showFrame(frame){if(!frame || visibleFrame===frame&&frame.visible)return;for(const r of frame.tiles){if(r.layer)r.layer.addTo(map);if(r.edge&&document.getElementById('mask-edge').checked)r.edge.addTo(map);}
- if(document.getElementById('mask-edge').checked)for(const r of frame.tiles){if(!r.blob||r.edge)continue;vectorAlphaEdge(r.blob,r.bounds).then(edge=>{if(!edge)return;r.edge=edge;if(frame===visibleFrame)edge.addTo(map);}).catch(e=>console.warn('Mask edge unavailable',e));}const previous=visibleFrame;visibleFrame=frame;frame.visible=true;if(previous&&previous!==frame)hideFrame(previous);frameCache.delete(frame.key);frameCache.set(frame.key,frame);while(frameCache.size>maxFrames){const oldKey=frameCache.keys().next().value;const old=frameCache.get(oldKey);if(old===visibleFrame)break;frameCache.delete(oldKey);disposeFrame(old);}updateTimeLabel();updateFrameStatus('Buffered · '+frame.tiles.filter(t=>t.layer).length+' tiles');}
+function showFrame(frame){if(!frame || visibleFrame===frame&&frame.visible)return;for(const r of frame.tiles){if(r.layer){r.layer.addTo(map);applyIntensity(r.layer);}if(r.edge&&document.getElementById('mask-edge').checked)r.edge.addTo(map);}
+ if(document.getElementById('mask-edge').checked)for(const r of frame.tiles){if(!r.blob||r.edge)continue;vectorAlphaEdge(r.blob,r.bounds).then(edge=>{if(!edge)return;r.edge=edge;if(frame===visibleFrame)edge.addTo(map);}).catch(e=>console.warn('Mask edge unavailable',e));}const previous=visibleFrame;visibleFrame=frame;frame.visible=true;if(previous&&previous!==frame)hideFrame(previous);frame.hiddenPrior=null;frameCache.delete(frame.key);frameCache.set(frame.key,frame);while(frameCache.size>maxFrames){const oldKey=frameCache.keys().next().value;const old=frameCache.get(oldKey);if(old===visibleFrame)break;frameCache.delete(oldKey);disposeFrame(old);}updateTimeLabel();updateFrameStatus('Buffered · '+frame.tiles.filter(t=>t.layer).length+' tiles');}
 function clear(){cancelPending();viewGeneration++;for(const f of frameCache.values())disposeFrame(f);frameCache.clear();visibleFrame=null;desiredFrameKey='';gridRecords=[];renderGrid();updateTimeLabel();}
 function updateFrameStatus(message){status.textContent='SST: '+message+' · '+frameCache.size+' frames buffered';legend.style.display=visibleFrame?'block':'none';}
 timeSlider.addEventListener('input',()=>{if(!latestAnalysisDay)return;const index=Number(timeSlider.value);selectedDay=index===29?'':utcDayOffset(latestAnalysisDay,index-29);updateTimeLabel();});
 document.getElementById('time-latest').addEventListener('click',()=>{if(!latestAnalysisDay)return;timeSlider.value='29';selectedDay='';updateTimeLabel();});
-renderButton.addEventListener('click',()=>{if(!latestAnalysisDay||!toggle.checked)return;appliedDay=stagedDay();updateTimeLabel();refresh(false);});
+renderButton.addEventListener('click',()=>{if(!latestAnalysisDay||!toggle.checked)return;const sameDate=visibleFrame&&visibleFrame.day===stagedDay();appliedDay=stagedDay();updateTimeLabel();refresh(Boolean(sameDate));});
 // Trace the FINAL SST PNG alpha in the browser, without modifying the SST pixels.
 // Convert pixel boundaries to EPSG:3857 positions used by Leaflet imageOverlay,
 // so the diagnostic maintains a fixed 1px stroke during zoom and pan.
@@ -260,8 +276,11 @@ function tileSpan(z,bounds){
 function viewDescription(){
  const b=map.getBounds(),span=tileSpan(map.getZoom(),b);
  const pixels=span<=2&&map.getZoom()>=9?768:(span<=4&&map.getZoom()>=7?512:256);
- const x0=Math.floor(b.getWest()/span),x1=Math.floor((b.getEast()-1e-9)/span);
- const y0=Math.floor(b.getSouth()/span),y1=Math.floor((b.getNorth()-1e-9)/span);
+ // At the world-fit zoom, select exactly one canonical longitude interval.
+ const west=Math.max(-180,b.getWest()),east=Math.min(180,b.getEast());
+ const x0=Math.floor(west/span),x1=Math.floor((east-1e-9)/span);
+ const southLimit=Math.max(-85,b.getSouth()),northLimit=Math.min(85,b.getNorth());
+ const y0=Math.floor(southLimit/span),y1=Math.floor((northLimit-1e-9)/span);
  const jobs=[],records=[];let excluded=0;
  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
   const west=x*span,east=(x+1)*span,south=y*span,north=(y+1)*span;
@@ -298,6 +317,12 @@ async function fetchFrame(day,view,signal,force=false,onProgress=()=>{}){
     if(decoded.decode)await decoded.decode();else await new Promise((resolve,reject)=>{decoded.onload=resolve;decoded.onerror=reject;});
     if(signal.aborted)break;
     const layer=L.imageOverlay(url,bounds,{opacity:.8,interactive:false});
+    if(job.x*job.span < -180 || (job.x+1)*job.span > 180){
+     layer.on('add',()=>{const el=layer.getElement();if(!el)return;const w=job.x*job.span,e=(job.x+1)*job.span;
+      const l=Math.max(0,(-180-w)/job.span*100),r=Math.max(0,(e-180)/job.span*100);
+      el.style.clipPath=`inset(0 ${r}% 0 ${l}%)`;
+     });
+    }
     const record={layer,url,edge:null,blob,bounds};frame.tiles.push(record);url=null;onProgress(++completed,job,'ready',record,frame);
     const stamp=response.headers.get('X-SST-Time');if(stamp)frame.stamp=stamp;
     if(day==='latest')receiveSSTTimestamp(stamp);
@@ -322,12 +347,15 @@ async function activate(day,view,{force=false}={}){
   const previews=new Map();
   if(showLoadOutlines.checked)for(const job of view.jobs){const r=tilePreview(job);if(r){r.addTo(loadingGroup);previews.set(job.span+':'+job.x+':'+job.y,r);}}
   progressText.textContent='0 / '+total+' tiles';
-  const frame=await fetchFrame(day,view,controller.signal,force,(count,job,result,record,partialFrame)=>{
-   if(session!==progressSession||controller.signal.aborted)return;
+  window.pendingSSTFrame=null;const frame=await fetchFrame(day,view,controller.signal,force,(count,job,result,record,partialFrame)=>{
+   if(session!==progressSession||controller.signal.aborted)return;window.pendingSSTFrame=partialFrame||null;
    progressText.textContent=count+' / '+total+' tiles rendered'+(result==='failed'?' · error':'');
    // Place actual SST imagery on top as each tile completes; don't remove the previous date yet.
    if(result==='ready'&&record&&desiredFrameKey===key&&generation===viewGeneration){
-    record.layer.addTo(map);partialFrame.visible=true;
+    record.layer.addTo(map);applyIntensity(record.layer);partialFrame.visible=true;
+    // Replace matching previous tile instead of blending two 80%-opaque layers.
+    // Keep a reference to restore if the new request fails.
+    if(visibleFrame){for(const prior of visibleFrame.tiles){if(prior.layer&&prior.layer.getBounds().equals(record.layer.getBounds())&&map.hasLayer(prior.layer)){map.removeLayer(prior.layer);partialFrame.hiddenPrior=partialFrame.hiddenPrior||[];partialFrame.hiddenPrior.push(prior);}}}
     updateFrameStatus('Mixed dates while rendering '+day+' · '+count+'/'+total+' tiles complete');
     if(document.getElementById('mask-edge').checked)vectorAlphaEdge(record.blob,record.bounds).then(edge=>{
      if(!edge)return;record.edge=edge;if(partialFrame.visible&&!controller.signal.aborted&&desiredFrameKey===key&&generation===viewGeneration)edge.addTo(map);
@@ -343,7 +371,7 @@ async function activate(day,view,{force=false}={}){
   while(frameCache.size>maxFrames){const k=frameCache.keys().next().value;const f=frameCache.get(k);if(f===visibleFrame){frameCache.delete(k);frameCache.set(k,f);continue;}frameCache.delete(k);disposeFrame(f);}
   return frame;
  }catch(e){if(!controller.signal.aborted){err.textContent=String(e.message||e);updateFrameStatus('Frame unavailable · previous image retained');}return null;}
- finally{if(frameController===controller){frameController=null;loadingGroup.clearLayers();progressSession++;progressText.textContent='Ready';}}
+ finally{if(frameController===controller){window.pendingSSTFrame=null;frameController=null;loadingGroup.clearLayers();progressSession++;progressText.textContent='Ready';}}
 }
 async function refresh(force=false){
  if(!toggle.checked){clear();status.textContent='SST disabled';legend.style.display='none';return;}
@@ -360,7 +388,6 @@ async function refresh(force=false){
 
 }
 toggle.addEventListener('change',()=>{updateTimeLabel();refresh(false);});
-document.getElementById('reload').addEventListener('click',()=>refresh(true));
 document.getElementById('mask-edge').addEventListener('change',async()=>{
  for(const frame of frameCache.values())for(const r of frame.tiles){if(r.edge){map.removeLayer(r.edge);r.edge=null;}}
  if(!document.getElementById('mask-edge').checked||!visibleFrame)return;
@@ -368,4 +395,33 @@ document.getElementById('mask-edge').addEventListener('change',async()=>{
  for(const r of frame.tiles){if(!r.blob)continue;try{r.edge=await vectorAlphaEdge(r.blob,r.bounds);if(frame===visibleFrame&&r.edge)r.edge.addTo(map);}catch(e){console.warn('Mask edge unavailable',e);}}
 });
 let debouncer;map.on('moveend zoomend',()=>{if(!toggle.checked)return;clearTimeout(debouncer);debouncer=setTimeout(()=>{clear();refresh(false)},500)});
+// Kick off the first SST fetch after the world-fit map initialization settles.
+// An initial render must not depend on the user panning or zooming.
+const cursorLabel=document.getElementById('cursor-sst');
+let cursorTimer=null,cursorRequest=null,cursorToken=0,lastCursorKey='';
+map.on('mousemove',e=>{
+ if(cursorTimer)clearTimeout(cursorTimer);
+ if(cursorRequest)cursorRequest.abort();
+ const ll=e.latlng;const lat=ll.lat.toFixed(4),lon=ll.lng.toFixed(4);
+ let tileRecord=null,day=null;
+ const candidates=[];
+ if(window.pendingSSTFrame)candidates.push(window.pendingSSTFrame);
+ if(visibleFrame)candidates.push(visibleFrame);
+ for(const frame of candidates){for(const r of frame.tiles){if(r.layer&&map.hasLayer(r.layer)&&r.layer.getBounds().contains(ll)){tileRecord=r;day=frame.stamp||frame.day;break;}}if(tileRecord)break;}
+ if(!tileRecord){cursorLabel.textContent=`${lat}°, ${lon}° · No displayed SST`;return;}
+ cursorLabel.textContent=`${lat}°, ${lon}° · Sampling SST…`;
+ const token=++cursorToken;
+ cursorTimer=setTimeout(async()=>{
+  const controller=new AbortController();cursorRequest=controller;
+  try{
+   const q=new URLSearchParams({lat:String(ll.lat),lon:String(ll.lng),date:day&&/^\d{4}-\d{2}-\d{2}/.test(day)?day.slice(0,10):''});
+   const response=await fetch('/api/sst-sample?'+q,{signal:controller.signal});
+   if(!response.ok)throw Error('sampling unavailable');
+   const data=await response.json();if(token!==cursorToken)return;
+   cursorLabel.textContent=data.available?`${lat}°, ${lon}° · ${data.celsius.toFixed(1)}°C / ${(data.celsius*9/5+32).toFixed(1)}°F · ${data.timestamp||day} (grid sample)`:`${lat}°, ${lon}° · No SST observation · ${day||''}`;
+  }catch(e){if(!controller.signal.aborted&&token===cursorToken)cursorLabel.textContent=`${lat}°, ${lon}° · SST sample unavailable`;}
+ },850);
+});
+map.on('mouseout',()=>{if(cursorTimer)clearTimeout(cursorTimer);if(cursorRequest)cursorRequest.abort();cursorLabel.textContent='Move cursor over SST to inspect temperature';});
+map.whenReady(()=>setTimeout(()=>{if(toggle.checked&&!visibleFrame&&!frameController)refresh(false);},400));
 </script></body></html>

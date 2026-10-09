@@ -1,3 +1,11 @@
+# Marine Raster Prototype v0.4.20
+
+Based on v0.4.14. This update moves SST diagnostics into a top-toolbar **Details** button, leaving the map free of the persistent SST status card. Click Details to open/close the diagnostics; Escape also closes the panel. The historical SST slider and progressive rendering remain unchanged.
+
+The minimum world-view zoom is derived from the actual map viewport and the Web Mercator world bounds (approximately ±85.05° latitude). The map centers at zero longitude when it reaches its minimum zoom, the OSM base layer does not repeat horizontally, and zooming out farther is disabled. Regional zooming and navigation remain available.
+
+Install: `unzip -o marine-weather-visualization-v0.4.20.zip -d ~/` then `cd ~/marine-weather-visualization && go test ./... && go run ./cmd/prototype`. Generated local coastline data are not included or overwritten. Browser/Safari acceptance remains to be tested.
+
 # Marine Raster Prototype v0.4.7 — conservative nearshore coverage estimates
 
 Based on v0.4.3; numerical SST acquisition, cache, tile sizing, and geographic clipping unchanged.
@@ -228,3 +236,24 @@ The date slider continues to stage a date without issuing requests; **Render SST
 ## v0.4.13 — Stable historical SST controls
 
 The two-row historical SST control uses reserved grid positions and fixed-size buttons, so selected-date and loading-progress text never reflows the slider or Render SST button. On narrow screens the timeline scrolls horizontally rather than wrapping. Progressive tile-by-tile SST rendering and explicit Render SST behavior remain unchanged.
+
+
+## v0.4.14 — Weather Layer selector and global overview limit
+
+The Weather Layer selection now lists SST, Swell, Air Temperature, and Wind. Only SST is enabled; other options are visible but unavailable until implemented. SST is selected by default and preserves the historical date controls and progressive tile renderer. The map has a minimum zoom level of 3, with a world-bound clamp at that overview zoom to prevent duplicated world views. At closer zoom levels normal pan behavior remains available.
+
+### World overview (v0.4.20)
+
+At maximum zoom-out the Web Mercator world is centered and fitted to the largest size that fits the map viewport while preserving aspect ratio. On wide viewports, empty side margins are expected; on tall viewports, margins can be above and below. The SST selector clips geographic tile selection to the canonical −180° to +180° longitudes at every zoom, so it does not render repeated worlds. The base map remains limited to the same world bounds. The top-bar Details button and manual historical Render SST workflow are unchanged.
+
+### v0.4.20 — Diagnostic panel and timeline layout
+The Coastline diagnostic, SST mask edge, SST tile grid, and Loading outlines checkboxes are now located inside the top-toolbar Details panel. Historical SST selected date, displayed date, and progress have dedicated rows without an overlapping label. The toolbar no longer includes the redundant San Francisco Bay message. World map calculations and SST tile rendering are unchanged.
+
+
+### v0.4.20 — Initial SST and unified rendering control
+
+The first SST request starts automatically after map initialization, without waiting for a pan. The top-toolbar Refresh SST action has been removed. The Historical SST Render SST button is the sole explicit action to apply a selected date; when the selected day is already displayed, it forces a refresh. No weather-layer-specific action appears in the global toolbar. If the initial NOAA request fails, the Details error and timeline progress report the failure; the user may retry with Render SST after metadata becomes available or pan to restart retrieval.
+
+## v0.4.20
+
+The Details button now sits beside Render SST. Natural, Vivid and High contrast only adjust browser display styling, not numerical SST values. As incoming tiles are drawn, matching previous-date tiles are hidden to prevent alpha blending and restored on request failure. A throttled /api/sst-sample numerical NOAA grid lookup supplies the map-corner cursor readout; this nearest-grid sample is distinct from nearshore display estimates and may be unavailable over land or during NOAA outages.

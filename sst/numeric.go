@@ -144,7 +144,9 @@ func FetchGridAt(ctx context.Context, client *http.Client, endpoint string, b ge
 		if len(safe) > 240 {
 			safe = safe[:240]
 		}
-		log.Printf("ERDDAP non-200 status=%d bounds=%.3f,%.3f,%.3f,%.3f path=%s response=%q", resp.StatusCode, b.West, b.South, b.East, b.North, req.URL.Path, safe)
+		if resp.StatusCode != 503 && resp.StatusCode != 502 && resp.StatusCode != 429 {
+			log.Printf("ERDDAP non-retryable status=%d bounds=%.3f,%.3f,%.3f,%.3f path=%s response=%q", resp.StatusCode, b.West, b.South, b.East, b.North, req.URL.Path, safe)
+		}
 		return Grid{}, fmt.Errorf("ERDDAP returned HTTP %d for geographic bounds %.2f,%.2f to %.2f,%.2f (see server log)", resp.StatusCode, b.West, b.South, b.East, b.North)
 	}
 	grid, err := ParseGrid(io.LimitReader(resp.Body, 8<<20))
