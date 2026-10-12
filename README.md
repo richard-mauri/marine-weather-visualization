@@ -261,25 +261,58 @@ The Details button now sits beside Render SST. Natural, Vivid and High contrast 
 
 ---
 
-## Consolidation development handoff — October 12, 2026
+## Development handoff — October 12, 2026 (consolidated main)
 
-**Current source:** N.2.8 thermal front integration candidate based on the stable v0.4.20 marine-weather application. The original stable Git commit `57e2d0e` remains the rollback point. This candidate is applied to a temporary `integration-n28` branch in `~/marine-weather-visualization`; do not tag a public release until verified in Safari. Branch `front-integration` points to accepted experiment N.2.7 (`c74c746`, tag `v0.4.20-N.2.7`). N.2.8 has not been accepted or tagged.
+### Authoritative project and current state
 
-**Git layout:** A single Git repository, remote `https://github.com/richard-mauri/marine-weather-visualization`, stable worktree `~/marine-weather-visualization`, experimental worktree `~/marine-front-integration`. Git 2.18 on macOS. No additional repositories. The experimental worktree can be retired with `git worktree remove` once the consolidated main application is validated and the old development branch is no longer needed. Keep it until then. The original standalone experiment is archived at `~/marine-archives/front-integration-N2.7-original.tar.gz`.
+**The final application is `~/marine-weather-visualization` (branch `main`).** The October 12 consolidation of the experimental N.2.8 thermal-front work has been committed on `main` as **`9137b4b`** (`Integrate N.2.8 thermal-front detection into marine weather application`). The user visually tested the consolidation preview and subsequently ran `go test ./...` successfully on `main`; `git status` showed a clean working tree. This is an **integrated development baseline**, not yet a tagged or published release. GitHub `origin/main` was still at `57e2d0e` when last checked: **one local commit ahead, not pushed**. Do not claim otherwise without checking Git.
 
-**Launch:** Run from the checked-out application's root directory with
+The prior stable v0.4.20 release remains tagged at **`57e2d0e`** (`v0.4.20`), providing a rollback point. The originally separate experimental N.2.7 repository was imported into branch `front-integration` as **`c74c746`**, tagged `v0.4.20-N.2.7`; that branch has unrelated root history. The temporary `integration-n28` branch still points to `57e2d0e` as last reported; it is no longer necessary after committing directly on `main`.
+
+### Git layout and intended cleanup
+
+- **One Git repository and one GitHub remote:** `https://github.com/richard-mauri/marine-weather-visualization`.
+- **Authoritative app:** `~/marine-weather-visualization`, branch `main`, commit `9137b4b` as last verified.
+- **Temporary legacy worktree:** `~/marine-front-integration`, branch `front-integration`, commit `c74c746`. This is not a second product and should be retired after confirming the consolidated application is satisfactory and no uncommitted work exists. Preserve the branch/tag history; use `git worktree remove ~/marine-front-integration` from the main worktree rather than deleting its `.git` metadata manually.
+- **Original standalone experimental copy:** archived separately as `~/marine-archives/front-integration-N2.7-original.tar.gz` according to prior session; do not delete the archive as part of worktree cleanup.
+- **Research:** `~/marine-weather-visualization/experiment/` contains original Baja studies and is part of the main project. Do not overwrite it with another Go application.
+- **Cache:** `~/marine-sst-cache` lives outside Git, shared across runs. Preserve it.
+
+The user wants **one application, one active project directory, one README, no additional Git repositories/worktrees**, and prefers ZIP `regen` builds with exact Terminal commands. Older Git 2.18 is installed on an Intel 2020 MacBook Air with 8 GB RAM; avoid expensive Homebrew source builds.
+
+### Starting and testing
+
+Stop any existing service using port 8081 first. From the authoritative project root:
 
 ```sh
+cd ~/marine-weather-visualization
+go test ./...
 FRONT_CACHE_DIR="$HOME/marine-sst-cache" \
-FRONT_GEOJSON="$HOME/marine-weather-visualization/experiment/front-research-baja-h2/front-tracks.geojson" \
+FRONT_GEOJSON="$PWD/experiment/front-research-baja-h2/front-tracks.geojson" \
 FRONT_VALIDATION_DIR="$PWD/experiment/front-validation-L4" \
 go run ./cmd/prototype
 ```
 
-Browse to `http://127.0.0.1:8081`. The application uses Leaflet and NOAA/ERDDAP numerical JPL MUR SST. Stop any existing server on 8081 before starting another. Persistent disk cache lives outside Git at `~/marine-sst-cache` and must not be deleted during upgrades.
+Open `http://127.0.0.1:8081`. **Check whether `experiment/front-validation-L4` actually exists** before relying on its path: the previous standalone experiment stored validation reports in `batch-validation-L4`, and the consolidated package did not itself establish that a directory was copied under `experiment/front-validation-L4`. If absent, identify the correct directory and update this command; do not fabricate reports. SST raster works separately from validation-report loading.
 
-**Implemented experimental features:** SST geographic raster with land masking, NOAA per-client Allow NOAA / Cache Only option, persistent numerical disk caching, partial tile rendering across pans, Save Session / auto restore of map/date/fronts, nautical mile scale, Standard and Exploratory thermal-front sensitivity, numerical transects and front inspectors, historical Baja research observations, and N.2.8 tile-failure diagnostics / retry button / exact duplicate suppression. Browser-saved session state is local to each origin.
+The Go application serves a Leaflet browser UI, backed by NOAA CoastWatch ERDDAP JPL MUR numerical sea-surface temperature data. Browser local storage is scoped to the URL origin; saved sessions on `127.0.0.1:8081` do not transfer automatically to other hostnames. `Allow NOAA` / `Cache Only` is a **per-client** permission, server-enforced; all clients share server-side caches. In Cache Only, uncached tiles remain blank without contacting NOAA, while cached adjacent tiles remain visible. Cached front geometry may appear before SST imagery on startup.
 
-**User-verified results:** N.2.4 Cache Only panning preserves present tiles while uncached areas remain blank. N.2.2+ session restored date, front geometry, map center, zoom after server restart. N.2.7 changing sensitivity triggers detections rapidly. On October 8, 2026, same area Standard: 21 paths, 203.9 NM; Exploratory: 106 paths, 851.1 NM; both 16 of 25 numerical tiles. In N.2.8 the 9 missing tiles are diagnosed as insufficient numerical SST data, and retry reproduced the same 16/25 and 106 paths. These incomplete tiles may involve land masking or tile acceptance and are not proved NOAA outages. Exploratory results are research candidates, not independently validated physical fronts.
+### Implemented functionality and verified observations
 
-**Next steps:** Validate consolidation in Safari before promoting `integration-n28` to `main`. No unqualified `git merge` of the unrelated-root `front-integration` branch; the ZIP delivers the source-tree changes explicitly. Later consider cautious cross-tile stitching and distinguishing land-dominated gaps from ocean coverage gaps, but the user prefers finishing front work promptly and moving on to other marine weather capabilities. Preserve existing cache, stable Git tag, and other unrelated projects/services. Update this README with the accepted release details after promotion.
+The integrated N.2.8 source includes SST display with masking, progressive partial-tile rendering, persistent numeric SST caching, per-client NOAA permission, Save Session and automatic date/map/front restoration, nautical-mile map scale, Standard and Exploratory thermal-front extraction, front inspection/transects, historical Baja research lines, missing numerical-tile diagnostics and retry, and conservative exact-path duplicate suppression. Do not assume all algorithmic candidates are scientifically verified boundaries.
+
+User-observed regressions corrected in the earlier experiments: SST no longer disappears when a few viewport tiles are uncached; Cache Only misses are expected (not noisy server errors); saved sessions reappear after stopping and restarting the server; sensitivity changes can trigger detection again using saved bounds. Visual test of the N.2.8 consolidation preview succeeded. Go tests passed after integrating into `main`.
+
+On **October 8, 2026**, with the same selected Baja region, Standard yielded **21 paths / 203.9 NM**, Exploratory **106 paths / 851.1 NM**, both with **16 of 25** numerical SST tiles. N.2.8 diagnosed the remaining **9** as insufficient numerical SST data; the user retried with the same results. Causes (land-dominated tiles, sample coverage, or tile acceptance thresholds) have **not** been definitively distinguished. Exact-path duplicate elimination removed **zero** paths in that run. The exploratory lines appear more useful visually but are unvalidated research candidates. Do not claim full geographic coverage or independently established thermal boundaries.
+
+### What remains / how to proceed
+
+1. Update and commit this README on `main` after reviewing it on the actual Mac. Confirm the referenced launch paths, and record the **new README commit hash**. The currently confirmed integration commit is `9137b4b` (prior to this documentation update).
+2. Recheck `git status`, `go test ./...`, and local visual operation. Only after release decisions should a new semantic version/tag be selected and `main`/the tag pushed to GitHub. As of the last check this consolidation was **not pushed or released**.
+3. When safe, remove the unused `~/marine-front-integration` worktree with Git, preserving the imported experimental `front-integration` branch and historical N.2.7 tag. Remove temporary `integration-n28` branch only after verifying it is not needed; no separate repository is needed.
+4. Front-feature future work is **optional**: conservative cross-tile stitching, and differentiating land-dominated numerical gaps from actual missing ocean data. The user is eager to move on to other marine weather layers; do not make extensive front research a prerequisite for subsequent work.
+5. Keep the stable `v0.4.20` tag, NOAA data/cache policies, original research, and unrelated sailing service/Cloudflare deployment unchanged unless explicitly requested.
+
+### ChatGPT new-conversation handoff
+
+This `README.md` is the **authoritative development handoff** for the single Marine Weather Visualization Go application. In a new conversation, read this document first, then request the **current actual project source ZIP** (or inspect the connected GitHub branch/files) before modifying code; the README is not a substitute for the source. Verify the actual Git branch, commit, and clean status from user-provided Terminal output rather than assuming they remain unchanged. For `regen`, prepare a downloadable, tested build targeted at **`~/marine-weather-visualization`**, preserve functioning features, and update this same README with changes, test results, pending issues and Git metadata. Do not create new Git repositories or worktrees without explicit consent. Avoid changing `pittsburg-saildata`, the sailing production service, or Cloudflare Tunnel configuration.
