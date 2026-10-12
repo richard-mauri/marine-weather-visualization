@@ -12,7 +12,8 @@ html,body{height:100%;margin:0;font-family:system-ui,Arial,sans-serif;color:#153
 #time-displayed{grid-column:3 / 5;grid-row:2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums} 
  
 #load-progress{grid-column:5 / 7;grid-row:2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:12px ui-monospace,monospace;font-variant-numeric:tabular-nums} 
-#time-control button{white-space:nowrap;height:34px;padding:5px 9px} 
+#time-control button{white-space:nowrap;height:34px;padding:5px 9px}
+#session-tools{display:flex;gap:5px;align-items:center;grid-column:1 / 3;grid-row:3;width:max-content}#session-tools button{width:auto!important;flex:none;padding:4px 9px!important;height:30px!important}#time-control{grid-template-rows:38px 38px 34px;min-height:126px} 
 @media(max-width:960px){#time-control{grid-template-columns:120px minmax(180px,1fr) 255px 94px 126px 88px;min-width:0}#time-control>*{min-width:0}#time-control{grid-template-columns:120px 190px 255px 94px 126px 88px}}
 #diagnostic-controls{border:1px solid #c4d4df;border-radius:6px;margin:0 0 12px;padding:8px;display:flex;flex-direction:column;align-items:flex-start;gap:7px}
 #diagnostic-controls legend{font-weight:700;padding:0 4px}
@@ -21,9 +22,123 @@ html,body{height:100%;margin:0;font-family:system-ui,Arial,sans-serif;color:#153
 #time-displayed{padding-left:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #time-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #load-progress{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
-</style></head><body><header><h1>Marine Raster Prototype <small>v0.4.20</small></h1><label for="weather-layer">Weather Layer <select id="weather-layer" aria-label="Weather layer"><option value="sst" selected>SST (JPL MUR)</option><option value="swell" disabled>Swell (coming soon)</option><option value="air-temp" disabled>Air Temperature (coming soon)</option><option value="wind" disabled>Wind (coming soon)</option></select></label><input type="checkbox" id="sst" checked hidden aria-hidden="true"></header><section id="time-control" aria-label="Historical SST date controls"><strong class="time-heading">Historical SST</strong><input id="time-slider" aria-label="Select historical SST analysis date" type="range" min="0" max="29" value="29" disabled><span id="time-label" title="Selected NOAA analysis date">Finding latest NOAA analysis…</span><button id="time-latest" type="button">Latest</button><button id="time-render" type="button" disabled>Render SST</button><button id="info-open" type="button" aria-controls="info" aria-expanded="false">Details</button><label id="color-style">Color intensity <select id="sst-intensity"><option value="natural">Natural</option><option value="vivid" selected>Vivid</option><option value="high">High contrast</option></select></label><span id="time-displayed" aria-live="polite" title="Date currently shown on map">Displayed: none</span><span id="load-progress" role="status" aria-live="polite">Idle</span></section><main><div id="map"></div><div id="cursor-sst" role="status">Move cursor over SST to inspect temperature</div><section id="info"><div id="info-title"><strong>SST status</strong><button id="info-collapse" type="button" aria-expanded="true">Hide details</button></div><div class="info-body"><fieldset id="diagnostic-controls"><legend>Diagnostics</legend><label title="Requires verified land polygons in data/land.geojson or SST_LAND_GEOJSON"><input type="checkbox" id="coast-diagnostic"> Coastline diagnostic</label><label title="Magenta vector line traces final SST PNG alpha boundary at a fixed screen-pixel width (including source no-data); cyan is the independent coastline"><input type="checkbox" id="mask-edge"> SST mask edge</label><label title="Show geographic tile footprints and exclusion reasons"><input type="checkbox" id="tile-grid"> SST tile grid</label><label id="outline-control" title="Show pending SST tile footprints without hiding the displayed imagery"><input type="checkbox" id="load-outlines" checked> Loading outlines</label></fieldset><div id="status">Base map ready. Enable SST to load NOAA data.</div><div id="error" role="status"></div><div id="tile-selected" role="status" aria-live="polite" style="display:none;margin-top:8px;padding:8px;border:1px solid #8ca3b4;border-radius:5px;background:#f1f6fa;white-space:pre-wrap;font:12px ui-monospace,monospace;overflow-wrap:anywhere"></div><div id="tile-diagnostic" class="muted" style="display:none;max-height:175px;overflow:auto;white-space:pre-wrap;font:11px ui-monospace,monospace;margin-top:8px"></div><div class="muted" id="source">JPL MUR SST · numerical values in °C · actual data time requested</div><div class="legend" id="legend"><strong>Numerical SST · fixed Celsius scale</strong><div class="ramp"></div><div class="ticks"><span>5°C / 41°F</span><span>17.5°C / 63.5°F</span><span>30°C / 86°F</span></div></div><div class="warning" id="coast-note">Coastline: checking for configured land polygons… </div><div class="warning">Nearshore estimates (within 0.018 degrees of available SST) appear at reduced opacity; other no-data regions remain transparent. Source-level raster land masking may still bleed inland. Precise shoreline clipping is unavailable unless a verified land polygon dataset is configured. Satellite SST is not a Delta channel-temperature measurement.</div></div></section></main><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script><script>
+
+/* Front inspection: readable popups even when CDN Leaflet CSS is absent. */
+.leaflet-popup-pane{z-index:720;pointer-events:none}
+.leaflet-popup{position:absolute;text-align:left;pointer-events:none}
+.leaflet-popup-content-wrapper{background:#fff;color:#15334d;border-radius:9px;box-shadow:0 3px 16px #0006;pointer-events:auto}
+.leaflet-popup-content{margin:12px 15px;line-height:1.42;font:13px system-ui,Arial,sans-serif;min-width:320px;max-width:min(390px,80vw)}
+.leaflet-popup-content button{font:inherit;background:#eaf1f8;border:1px solid #8ca3b4;border-radius:5px}
+.leaflet-popup-close-button{position:absolute;right:7px;top:5px;z-index:3;color:#234;text-decoration:none;font-size:20px;pointer-events:auto}
+.leaflet-popup-tip-container{position:absolute;left:50%;margin-left:-20px;width:40px;height:20px;overflow:hidden;pointer-events:none}
+.leaflet-popup-tip{background:#fff;width:17px;height:17px;transform:rotate(45deg);margin:-9px auto 0;box-shadow:0 3px 10px #0003}
+.front-profile-summary{margin:7px 0;padding:7px 8px;border-radius:5px;background:#edf4f8;font-size:12px;line-height:1.5}
+
+/* Milestone M.1: concise inspection readout while retaining full measurement detail. */
+#front-inspector .front-profile-summary{font-size:12px;line-height:1.4}
+#front-inspector details.front-section-details{margin:6px 0;border:1px solid #d6e1e8;border-radius:5px;padding:6px 8px}
+#front-inspector details.front-section-details summary{cursor:pointer;font-weight:600}
+#front-strength-review{font-size:12px;line-height:1.4;margin:6px 0;padding:7px 8px;background:#f2f6f9;border-radius:5px}
+/* Milestone K.1: fixed front inspector avoids Leaflet popup auto-pan and clipping. */
+#front-inspector{display:none;position:absolute;z-index:1100;left:65px;top:14px;width:min(480px,calc(100% - 85px));max-height:calc(100% - 28px);box-sizing:border-box;overflow:auto;background:#fff;color:#15334d;border:1px solid #abc1d0;border-radius:9px;box-shadow:0 4px 20px #0006;padding:12px 14px;font:13px system-ui,Arial,sans-serif;line-height:1.45}
+#front-inspector.open{display:block}
+#front-inspector-header{display:flex;justify-content:space-between;align-items:center;gap:8px;position:sticky;top:-12px;background:white;padding:4px 0;z-index:1}
+#front-inspector-close{padding:3px 8px;font-size:16px}
+#front-inspector button{font:inherit;border-radius:5px;border:1px solid #819caf;background:#eaf1f8}
+#front-inspector-chart{margin-top:8px;overflow-x:auto}
+#front-inspector-chart svg{display:block;width:100%;max-width:100%;height:auto}
+#front-inspector-chart{font-size:14px}
+#front-inspector .front-profile-summary{font-size:14px;line-height:1.5}
+
+/* M.2: compact controls; the map remains usable with both panels open. */
+#info{top:64px;right:12px;width:296px;max-width:calc(100% - 24px);padding:9px 11px}
+#info.open{max-height:min(66vh,590px)}
+#info .info-body{font-size:12px}
+#front-controls{margin:4px 0 8px;padding:7px;border:1px solid #c4d4df;border-radius:6px}
+#front-controls label{display:block;margin:5px 0}
+#front-controls legend{font-weight:700}
+#front-strength-help,#front-strength-counts{border:1px solid #d5e2eb;border-radius:5px;margin:6px 0;padding:5px 7px;background:#f6f9fb}
+#front-strength-help summary,#front-strength-counts summary{cursor:pointer;font-weight:600;line-height:1.4}
+#front-strength-review{padding:5px 2px;background:none;margin:3px 0;font-size:12px}
+#front-inspector{width:min(515px,calc(100% - 85px));max-height:calc(100% - 30px);padding:11px 13px}
+#front-inspector-header{top:-11px;min-height:33px;border-bottom:1px solid #dbe5eb;margin-bottom:6px}
+.front-inspection-body>div:not(.front-profile-summary):not(#front-inspector-chart){line-height:1.35}
+#front-inspector .front-profile-summary{font-size:12px;line-height:1.4;margin:7px 0}
+#front-inspector .front-map-qualification{font-size:11px;line-height:1.4;color:#526779;margin:5px 0 7px}
+#front-inspector-chart{margin-top:9px}
+#front-inspector-chart svg{max-height:320px}
+@media(max-width:700px){#front-inspector{left:45px;width:calc(100% - 58px);max-height:70%}#info{top:56px;right:6px;max-width:calc(100% - 12px)}}
+/* M.3: panel close affordance mirrors the inspector. */
+#info-collapse{min-width:29px;height:29px;font-size:18px;line-height:1;padding:2px 7px;border:1px solid #819caf;border-radius:5px;background:#eaf1f8;color:#15334d}
+#info-title{min-height:30px}
+#front-inspector details.front-map-method{margin:6px 0;padding:0 3px}
+#front-inspector details.front-map-method summary{cursor:pointer;color:#526779;font-size:12px}
+#front-inspector .front-map-qualification{padding:5px 1px}
+#info-title.movable-panel-heading,#front-inspector-header.movable-panel-heading{cursor:grab;touch-action:none;user-select:none}
+#info-title.movable-panel-heading:active,#front-inspector-header.movable-panel-heading:active{cursor:grabbing}
+#nm-map-scale{position:absolute;bottom:31px;left:13px;z-index:850;background:rgba(255,255,255,.92);color:#142d40;border-radius:4px;padding:5px 7px;font:600 12px system-ui,Arial,sans-serif;box-shadow:0 1px 5px #0004;pointer-events:none;white-space:nowrap}
+#nm-map-scale .scale-rule{height:8px;border:2px solid #142d40;border-top:0;margin-top:3px}
+</style></head><body><header><h1>Marine Raster Prototype <small>v0.4.20-N.2.2</small></h1><label for="weather-layer">Weather Layer <select id="weather-layer" aria-label="Weather layer"><option value="sst" selected>SST (JPL MUR)</option><option value="swell" disabled>Swell (coming soon)</option><option value="air-temp" disabled>Air Temperature (coming soon)</option><option value="wind" disabled>Wind (coming soon)</option></select></label><input type="checkbox" id="sst" checked hidden aria-hidden="true"></header><section id="time-control" aria-label="Historical SST date controls"><strong class="time-heading">Historical SST</strong><input id="time-slider" aria-label="Select historical SST analysis date" type="range" min="0" max="29" value="29" disabled><span id="time-label" title="Selected NOAA analysis date">Finding latest NOAA analysis…</span><button id="time-latest" type="button">Latest</button><button id="time-render" type="button" disabled>Render SST</button><button id="info-open" type="button" aria-controls="info" aria-expanded="false">Details</button><span id="session-tools"><button id="save-map-view" type="button" title="Save map, SST date, selection and on-demand fronts">Save Session</button><button id="restore-map-view" type="button" title="Restore saved session">Restore</button><button id="reset-map-view" type="button" title="Delete the saved session">Reset</button></span><label id="color-style">Color intensity <select id="sst-intensity"><option value="natural">Natural</option><option value="vivid" selected>Vivid</option><option value="high">High contrast</option></select></label><span id="time-displayed" aria-live="polite" title="Date currently shown on map">Displayed: none</span><span id="load-progress" role="status" aria-live="polite">Idle</span></section><main><div id="map"></div><div id="nm-map-scale" role="status" aria-label="Map distance scale"></div><aside id="front-inspector" aria-label="Selected thermal front"><div id="front-inspector-header"><strong>Thermal front inspection</strong><button type="button" id="front-inspector-close" aria-label="Close front inspection">×</button></div><div id="front-inspector-content"></div></aside><div id="cursor-sst" role="status">Move cursor over SST to inspect temperature</div><section id="info"><div id="info-title"><strong>SST status</strong><button id="info-collapse" type="button" aria-label="Close Details" title="Close Details">×</button></div><div class="info-body"><fieldset id="front-controls"><legend>Research thermal fronts (experimental)</legend><label><input id="front-enabled" type="checkbox" disabled> Show historical Baja research fronts</label><div id="on-demand-controls" style="margin:8px 0;padding:8px;border:1px solid #b7c9d7;border-radius:5px;background:#f5f9fc"><button type="button" id="select-detection-area">Select area</button><button type="button" id="detect-fronts-view">Detect fronts</button><button type="button" id="clear-detected-fronts">Clear fronts</button><div id="detect-fronts-status" role="status" aria-live="polite" style="font-size:12px;line-height:1.4;margin-top:6px">Click Select area. Drag the center handle to move; drag the southeast corner to resize (0.4°–3.0° (multi-tile)).</div></div><label>Minimum observations <select id="front-min-observations"><option value="1">1 day</option><option value="2">2 days</option><option value="3">3 days</option><option value="4">4 days</option></select></label><label><input type="checkbox" id="front-strength" disabled> Experimental measured strength</label><details id="front-strength-help"><summary>Strength colors and thresholds</summary><div id="front-strength-legend" class="muted" style="display:none;font-size:12px;line-height:1.6">White: weak · Black: moderate · Magenta: strong<br>Orange dashed outline: quality review · Gray dashed: unverified<br>Experimental display thresholds; not validated fishing guidance. Colors between the three measured positions are display estimates, not continuous observations.</div></details><details id="front-strength-counts"><summary>Daily strength counts</summary><div id="front-strength-review" style="display:none" aria-live="polite"></div></details><div id="front-status" class="muted" aria-live="polite">Checking local GeoJSON…</div><div class="warning">Research only — not verified marine planning guidance.</div></fieldset><fieldset id="diagnostic-controls"><legend>Diagnostics</legend><label title="Requires verified land polygons in data/land.geojson or SST_LAND_GEOJSON"><input type="checkbox" id="coast-diagnostic"> Coastline diagnostic</label><label title="Magenta vector line traces final SST PNG alpha boundary at a fixed screen-pixel width (including source no-data); cyan is the independent coastline"><input type="checkbox" id="mask-edge"> SST mask edge</label><label title="Show geographic tile footprints and exclusion reasons"><input type="checkbox" id="tile-grid"> SST tile grid</label><label id="outline-control" title="Show pending SST tile footprints without hiding the displayed imagery"><input type="checkbox" id="load-outlines" checked> Loading outlines</label></fieldset><div id="status">Base map ready. Enable SST to load NOAA data.</div><div id="error" role="status"></div><div id="tile-selected" role="status" aria-live="polite" style="display:none;margin-top:8px;padding:8px;border:1px solid #8ca3b4;border-radius:5px;background:#f1f6fa;white-space:pre-wrap;font:12px ui-monospace,monospace;overflow-wrap:anywhere"></div><div id="tile-diagnostic" class="muted" style="display:none;max-height:175px;overflow:auto;white-space:pre-wrap;font:11px ui-monospace,monospace;margin-top:8px"></div><div class="muted" id="source">JPL MUR SST · numerical values in °C · actual data time requested</div><div class="legend" id="legend"><strong>Numerical SST · fixed Celsius scale</strong><div class="ramp"></div><div class="ticks"><span>5°C / 41°F</span><span>17.5°C / 63.5°F</span><span>30°C / 86°F</span></div></div><div class="warning" id="coast-note">Coastline: checking for configured land polygons… </div><div class="warning">Nearshore estimates (within 0.018 degrees of available SST) appear at reduced opacity; other no-data regions remain transparent. Source-level raster land masking may still bleed inland. Precise shoreline clipping is unavailable unless a verified land polygon dataset is configured. Satellite SST is not a Delta channel-temperature measurement.</div></div></section></main><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script><script>
 const worldBounds=L.latLngBounds([[-85.0511287798,-180],[85.0511287798,180]]);
-const map=L.map('map',{preferCanvas:true,minZoom:-2,zoomSnap:0.01,zoomDelta:1,maxBounds:worldBounds,maxBoundsViscosity:1}).setView([37.82,-122.25],10);
+const MAP_VIEW_KEY='marine-raster-prototype.saved-view.v1';
+const SESSION_KEY='marine-raster-prototype.saved-session.v2';
+let storedFrontPayload=null;
+function readSavedSession(){try{const v=JSON.parse(localStorage.getItem(SESSION_KEY));return v&&v.version===2&&v.map&&Number.isFinite(v.map.lat)&&Number.isFinite(v.map.lng)&&Number.isFinite(v.map.zoom)&&(!v.day||/^\d{4}-\d{2}-\d{2}$/.test(v.day))?v:null;}catch(e){console.warn('Saved session unavailable',e);return null;}}
+const startupSession=readSavedSession();
+const defaultView={lat:37.82,lng:-122.25,zoom:10};
+function readSavedView(){
+ try{const v=JSON.parse(localStorage.getItem(MAP_VIEW_KEY));
+  if(v&&Number.isFinite(v.lat)&&Number.isFinite(v.lng)&&Number.isFinite(v.zoom)&&Math.abs(v.lat)<=85.0511287798&&Math.abs(v.lng)<=180&&v.zoom>=-2&&v.zoom<=19)return v;
+ }catch(e){console.warn('Stored map view unavailable',e);}return null;
+}
+const startupSavedView=startupSession?.map||readSavedView();
+const startupView=startupSavedView||defaultView;
+const map=L.map('map',{preferCanvas:true,minZoom:-2,zoomSnap:0.01,zoomDelta:1,maxBounds:worldBounds,maxBoundsViscosity:1}).setView([startupView.lat,startupView.lng],startupView.zoom);
+function applyMapView(v){map.setView([v.lat,v.lng],Math.max(map.getMinZoom(),v.zoom),{animate:false});}
+function saveMapView(){
+ const c=map.getCenter();const v={lat:c.lat,lng:c.lng,zoom:map.getZoom()};
+ try{localStorage.setItem(MAP_VIEW_KEY,JSON.stringify(v));return true;}catch(e){console.warn('Cannot save map view',e);return false;}
+}
+function sessionSnapshot(){
+ const c=map.getCenter(), mapState={lat:c.lat,lng:c.lng,zoom:map.getZoom()};
+ const b=selectedArea;
+ return {version:2,map:mapState,day:appliedDay||selectedDay||'',intensity:document.getElementById('sst-intensity').value,
+  historical:document.getElementById('front-enabled').checked,
+  strength:document.getElementById('front-strength').checked,
+  area:b?{south:b.getSouth(),west:b.getWest(),north:b.getNorth(),east:b.getEast()}:null,
+  fronts:storedFrontPayload&&storedFrontPayload.day===(appliedDay||selectedDay)?storedFrontPayload:null};
+}
+function saveSession(){try{const v=sessionSnapshot();localStorage.setItem(SESSION_KEY,JSON.stringify(v));saveMapView();return true;}catch(e){console.warn('Cannot save session',e);return false;}}
+document.getElementById('save-map-view').addEventListener('click',()=>{
+ const b=document.getElementById('save-map-view');b.textContent=saveSession()?'Saved':'Save failed';setTimeout(()=>{b.textContent='Save Session';},1800);
+});
+document.getElementById('restore-map-view').addEventListener('click',()=>{
+ const v=readSavedSession();if(v)restoreSession(v);else {const m=readSavedView();if(m)applyMapView(m);}
+});
+document.getElementById('reset-map-view').addEventListener('click',()=>{
+ try{localStorage.removeItem(SESSION_KEY);localStorage.removeItem(MAP_VIEW_KEY);}catch(e){console.warn('Cannot reset session',e);}
+ applyMapView(defaultView);document.getElementById('detect-fronts-status').textContent='Saved session cleared; existing display unchanged.';
+});
+// Leaflet's built-in scale only supports metric/imperial. This uses
+// Leaflet's geographic distance at the actual map latitude and displays NM.
+const mapScale=document.getElementById('nm-map-scale');
+function updateNauticalScale(){
+ const size=map.getSize();if(!size.x||!size.y)return;
+ const pxLimit=Math.min(160,Math.max(70,size.x*.2));
+ const y=Math.min(size.y-10,Math.max(10,size.y-55));
+ const a=map.containerPointToLatLng([25,y]);
+ const b=map.containerPointToLatLng([25+pxLimit,y]);
+ const maxNM=map.distance(a,b)/1852;
+ if(!(maxNM>0))return;
+ const magnitude=Math.pow(10,Math.floor(Math.log10(maxNM)));
+ const options=[1,2,5,10].map(n=>n*magnitude);
+ const distance=options.filter(n=>n<=maxNM).pop()||magnitude/2;
+ const width=Math.max(1,pxLimit*distance/maxNM);
+ mapScale.innerHTML=`<span>${Number(distance.toPrecision(3))} NM</span><div class="scale-rule" style="width:${width.toFixed(1)}px"></div>`;
+}
+map.on('zoomend moveend resize',updateNauticalScale);
+map.whenReady(updateNauticalScale);
+
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,minZoom:-2,minNativeZoom:0,noWrap:true,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 let worldMinZoom=0;
 function atWorldOverview(){return map.getZoom() <= worldMinZoom+0.025;}
@@ -36,7 +151,7 @@ function updateWorldZoomLimit(){
  worldMinZoom=map.getBoundsZoom(worldBounds,false);
  map.setMinZoom(worldMinZoom);
  map.setMaxBounds(worldBounds);
- if(wasOverview||map.getZoom()<=worldMinZoom+0.025)
+ if((wasOverview||map.getZoom()<=worldMinZoom+0.025)&&!startupSavedView)
   map.setView([0,0],worldMinZoom,{animate:false});
  else map.panInsideBounds(worldBounds,{animate:false});
 }
@@ -54,8 +169,8 @@ const detailsButton=document.getElementById('info-open');
 function setDetailsOpen(open){
  infoPanel.classList.toggle('open',open);
  detailsButton.setAttribute('aria-expanded',String(open));
- detailsButton.textContent=open?'Close details':'Details';
- if(open){infoPanel.classList.remove('collapsed');infoCollapse.textContent='Hide details';infoCollapse.setAttribute('aria-expanded','true');}
+ detailsButton.textContent='Details';
+ if(open){infoPanel.classList.remove('collapsed');infoCollapse.textContent='×';}
 }
 detailsButton.addEventListener('click',()=>setDetailsOpen(!infoPanel.classList.contains('open')));
 infoCollapse.addEventListener('click',()=>setDetailsOpen(false));
@@ -205,6 +320,438 @@ const intensity=document.getElementById('sst-intensity');
 function applyIntensity(layer){if(!layer)return;const el=layer.getElement();if(!el)return;const mode=intensity.value;el.style.filter=mode==='natural'?'none':mode==='vivid'?'saturate(1.45) contrast(1.06)':'saturate(1.7) contrast(1.25)';}
 intensity.addEventListener('change',()=>{for(const frame of frameCache.values())for(const record of frame.tiles)applyIntensity(record.layer);if(window.pendingSSTFrame)for(const record of window.pendingSSTFrame.tiles)applyIntensity(record.layer);});
 let visibleFrame=null,desiredFrameKey='',frameController=null;
+// Milestone I: GeoJSON is generated by the isolated research project and supplied
+// explicitly by FRONT_GEOJSON. Do not infer fronts from rendered SST colors.
+
+// Milestone N: independently requested single-day numerical SST front candidates.
+// Never mislabel them as tracked fronts or assign precomputed L.4 strength grades.
+let onDemandLayer=L.layerGroup().addTo(map), onDemandController=null, onDemandGeneration=0;
+const onDemandStatus=document.getElementById('detect-fronts-status');
+const onDemandButton=document.getElementById('detect-fronts-view');
+const selectAreaButton=document.getElementById('select-detection-area');
+const BOX_MIN=.4, BOX_MAX=3.0;
+let boxSize=.6,boxHalf=boxSize/2;
+let selectedArea=null, selectedRectangle=null, detectionSelecting=false, savedBoxCenter=null;
+let selectionMapNavigating=false, selectionViewportPoint=null;
+function validBoxCenter(lat,lng){return Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=79&&lng>=-180+boxHalf&&lng<=180-boxHalf;}
+function detectionDimensions(){const lat=savedBoxCenter?.lat??0;return 'Area '+boxSize.toFixed(2)+'° × '+boxSize.toFixed(2)+'° (≈ '+(boxSize*60).toFixed(0)+' NM N–S × '+(boxSize*60*Math.cos(lat*Math.PI/180)).toFixed(0)+' NM E–W)';}
+// N.1.5: dedicated HTML control surface; never delegate selection dragging to Leaflet markers.
+// The overlay passes through pointer events except for its two handles.
+const selectionOverlay=document.createElement('div');
+selectionOverlay.id='selection-control-overlay';
+selectionOverlay.style.cssText='position:absolute;inset:0;z-index:1050;pointer-events:none;overflow:hidden';
+map.getContainer().appendChild(selectionOverlay);
+function newSelectionControl(kind){
+ const el=document.createElement('div');
+ el.className='selection-html-handle selection-'+kind;
+ el.setAttribute('role','button');
+ el.setAttribute('aria-label',kind==='move'?'Move detection area':'Resize detection area');
+ el.title=el.getAttribute('aria-label');
+ el.style.cssText=(kind==='move'?'width:44px;height:44px;border-radius:50%;background:#00efff;border:5px solid #04283b;':'width:27px;height:27px;border-radius:5px;background:white;border:4px solid #006f86;')+'box-sizing:border-box;position:absolute;pointer-events:auto;cursor:grab;touch-action:none;user-select:none;box-shadow:0 1px 10px #0009;transform:translate(-50%,-50%);display:none';
+ selectionOverlay.appendChild(el);
+ return el;
+}
+const moveBoxControl=newSelectionControl('move');
+const resizeBoxControl=newSelectionControl('resize');
+function positionSelectionControls(){
+ if(!detectionSelecting||!savedBoxCenter){moveBoxControl.style.display='none';resizeBoxControl.style.display='none';return;}
+ const center=map.latLngToContainerPoint(savedBoxCenter);
+ const corner=map.latLngToContainerPoint([savedBoxCenter.lat+boxHalf,savedBoxCenter.lng+boxHalf]);
+ for(const [el,pt] of [[moveBoxControl,center],[resizeBoxControl,corner]]){
+  el.style.display='block';el.style.left=pt.x+'px';el.style.top=pt.y+'px';
+ }
+}
+function wireSelectionControl(el,kind){
+ let pointer=null,dragPreviouslyEnabled=false;
+ const finish=(e)=>{
+  if(pointer===null||(e&&e.pointerId!==pointer))return;
+  const old=pointer;pointer=null;
+  try{if(el.hasPointerCapture(old))el.releasePointerCapture(old);}catch(_){}
+  if(dragPreviouslyEnabled)map.dragging.enable();
+  el.style.cursor='grab';
+  onDemandStatus.textContent=detectionDimensions()+' · Ready to detect.';
+ };
+ // Capture both event families: Leaflet listens to mousedown, while our drag uses pointer events.
+ for(const type of ['mousedown','touchstart','click','dblclick'])el.addEventListener(type,e=>e.stopPropagation(),{passive:false});
+ el.addEventListener('pointerdown',e=>{
+  if(!detectionSelecting||pointer!==null||e.button!==0)return;
+  e.preventDefault();e.stopPropagation();
+  dragPreviouslyEnabled=map.dragging.enabled();
+  map.dragging.disable();
+  pointer=e.pointerId;el.style.cursor='grabbing';
+  try{el.setPointerCapture(pointer);}catch(_){finish();}
+ });
+ el.addEventListener('pointermove',e=>{
+  if(pointer!==e.pointerId)return;
+  e.preventDefault();e.stopPropagation();
+  const rect=map.getContainer().getBoundingClientRect();
+  const ll=map.containerPointToLatLng([e.clientX-rect.left,e.clientY-rect.top]);
+  if(kind==='move'){
+   if(validBoxCenter(ll.lat,ll.lng))updateDetectionBox(ll);
+  }else{
+   if(!savedBoxCenter)return;
+   const candidate=2*Math.max(Math.abs(ll.lat-savedBoxCenter.lat),Math.abs(ll.lng-savedBoxCenter.lng));
+   boxSize=Math.max(BOX_MIN,Math.min(BOX_MAX,Math.round(candidate*100)/100));boxHalf=boxSize/2;
+   updateDetectionBox(savedBoxCenter);
+  }
+ });
+ el.addEventListener('pointerup',finish);
+ el.addEventListener('pointercancel',finish);
+ el.addEventListener('lostpointercapture',()=>finish());
+ window.addEventListener('blur',()=>finish());
+}
+wireSelectionControl(moveBoxControl,'move');
+wireSelectionControl(resizeBoxControl,'resize');
+map.on('move zoom resize',positionSelectionControls);
+map.createPane('detectionBoxPane');
+map.getPane('detectionBoxPane').style.zIndex='660';
+map.getPane('detectionBoxPane').style.pointerEvents='none';
+map.createPane('onDemandFrontPane');
+map.getPane('onDemandFrontPane').style.zIndex='690';
+function hideDetectionBox(){
+ detectionSelecting=false;
+ selectionMapNavigating=false;selectionViewportPoint=null;
+ if(selectedRectangle){map.removeLayer(selectedRectangle);selectedRectangle=null;}
+ positionSelectionControls();
+ selectAreaButton.textContent='Select area';
+ selectAreaButton.setAttribute('aria-pressed','false');
+}
+function updateDetectionBox(center){
+ if(!detectionSelecting)return;
+ const c=center||savedBoxCenter||map.getCenter(),lat=c.lat,lng=c.lng;
+ if(!validBoxCenter(lat,lng)){
+   selectedArea=null;
+   onDemandStatus.textContent='Choose an area below 79° latitude and away from the date line.';
+   return;
+ }
+ savedBoxCenter=L.latLng(lat,lng);
+ if(!selectionMapNavigating)selectionViewportPoint=map.latLngToContainerPoint(savedBoxCenter);
+ selectedArea=L.latLngBounds([[lat-boxHalf,lng-boxHalf],[lat+boxHalf,lng+boxHalf]]);
+ if(!selectedRectangle){
+   selectedRectangle=L.rectangle(selectedArea,{pane:'detectionBoxPane',color:'#00ecff',weight:3,opacity:1,dashArray:'8 6',fillColor:'#00fcff',fillOpacity:.045,interactive:false}).addTo(map);
+ }else selectedRectangle.setBounds(selectedArea);
+ positionSelectionControls();
+ onDemandStatus.textContent=detectionDimensions()+' · Center '+lat.toFixed(3)+'°, '+lng.toFixed(3)+'°. Drag center to move, corner to resize.';
+}
+// Preserve the selection's viewport position as the map underneath moves.
+map.on('movestart',()=>{
+ if(!detectionSelecting||!savedBoxCenter)return;
+ selectionViewportPoint=map.latLngToContainerPoint(savedBoxCenter);
+ selectionMapNavigating=true;
+});
+map.on('move',()=>{
+ if(!detectionSelecting||!selectionMapNavigating||!selectionViewportPoint)return;
+ updateDetectionBox(map.containerPointToLatLng(selectionViewportPoint));
+});
+map.on('moveend',()=>{
+ if(!detectionSelecting||!selectionMapNavigating)return;
+ if(selectionViewportPoint)updateDetectionBox(map.containerPointToLatLng(selectionViewportPoint));
+ selectionMapNavigating=false;
+ if(savedBoxCenter)selectionViewportPoint=map.latLngToContainerPoint(savedBoxCenter);
+});
+selectAreaButton.addEventListener('click',()=>{
+ if(detectionSelecting){hideDetectionBox();onDemandStatus.textContent='Area selection cancelled. Existing fronts remain visible.';return;}
+ // Every new selection begins in the CURRENT viewport, never at stale map coordinates.
+ selectionMapNavigating=false;selectionViewportPoint=null;
+ const viewportCenter=map.getCenter();
+ savedBoxCenter=L.latLng(viewportCenter.lat,viewportCenter.lng);
+ detectionSelecting=true;selectAreaButton.textContent='Cancel selection';selectAreaButton.setAttribute('aria-pressed','true');updateDetectionBox(savedBoxCenter);
+});
+function clearOnDemand(){storedFrontPayload=null;onDemandGeneration++;if(onDemandController){onDemandController.abort();onDemandController=null;}onDemandLayer.clearLayers();onDemandButton.disabled=false;}
+document.getElementById('clear-detected-fronts').addEventListener('click',()=>{clearOnDemand();hideDetectionBox();onDemandStatus.textContent='On-demand front paths cleared. Click Select area to start again.';});
+renderButton.addEventListener('click',()=>{clearOnDemand();hideDetectionBox();onDemandStatus.textContent='On-demand fronts cleared for SST date change.';});
+function drawOnDemandPayload(payload,day){
+ onDemandLayer.clearLayers();
+ let drawable=0, totalLength=0;
+ for(const f of payload.features||[]){
+  if(!f.geometry||f.geometry.type!=='LineString'||!Array.isArray(f.geometry.coordinates))continue;
+  const latlngs=f.geometry.coordinates.filter(x=>Array.isArray(x)&&x.length>=2&&Number.isFinite(x[0])&&Number.isFinite(x[1])).map(x=>[x[1],x[0]]);
+  if(latlngs.length<2||latlngs.every(x=>x[0]===latlngs[0][0]&&x[1]===latlngs[0][1]))continue;
+  const p=f.properties||{};
+  L.polyline(latlngs,{pane:'onDemandFrontPane',color:'#071b2c',weight:8,opacity:.98,interactive:false,lineCap:'round',lineJoin:'round'}).addTo(onDemandLayer);
+  const line=L.polyline(latlngs,{pane:'onDemandFrontPane',color:'#00edff',weight:4.5,opacity:1,dashArray:'12 6',lineCap:'round',lineJoin:'round'}).addTo(onDemandLayer);
+  line.on('click',e=>inspectResearchFront(f,e.latlng,true));
+  drawable++;if(Number.isFinite(Number(p.length_nm)))totalLength+=Number(p.length_nm);
+ }
+ return {drawable,totalLength};
+}
+function restoreOnDemandPayload(saved){
+ if(!saved||saved.day!==appliedDay||!saved.payload)return;
+ const result=drawOnDemandPayload(saved.payload,saved.day);
+ storedFrontPayload=saved;
+ onDemandStatus.textContent='Restored '+result.drawable+' saved front paths for '+saved.day+' (no NOAA detection requested).';
+}
+onDemandButton.addEventListener('click',async()=>{
+ const day=appliedDay;
+ if(!day){onDemandStatus.textContent='Render SST for the desired date first.';return;}
+ if(!detectionSelecting||!selectedArea){onDemandStatus.textContent='Click Select area and drag the circular handle over the desired ocean region.';return;}
+ const b=selectedArea,west=b.getWest(),east=b.getEast(),south=b.getSouth(),north=b.getNorth();
+ clearOnDemand();const generation=onDemandGeneration;onDemandController=new AbortController();onDemandButton.disabled=true;
+ onDemandStatus.textContent='Analyzing numerical NOAA SST for '+day+' across overlapping tiles… This can take several minutes; leave this page open.';
+ const q=new URLSearchParams({date:day,west:west.toFixed(5),east:east.toFixed(5),south:south.toFixed(5),north:north.toFixed(5)});
+ try {const response=await fetch('/api/detect-fronts?'+q,{signal:onDemandController.signal});const body=await response.text();if(!response.ok)throw new Error(body.slice(0,240)||('HTTP '+response.status));const payload=JSON.parse(body);
+ if(generation!==onDemandGeneration||day!==appliedDay)return;
+ const result=drawOnDemandPayload(payload,day);
+ storedFrontPayload={day,payload};
+ hideDetectionBox();
+ onDemandStatus.textContent=result.drawable+' visible front paths ('+result.totalLength.toFixed(1)+' NM total) · '+(payload.tiles_completed||0)+'/'+(payload.tiles_total||1)+' tiles · '+day+' · Research only.';
+ }catch(e){if(generation===onDemandGeneration)onDemandStatus.textContent='Detection unavailable: '+e.message;}finally{if(generation===onDemandGeneration){onDemandButton.disabled=false;onDemandController=null;}}
+});
+const frontEnabled=document.getElementById('front-enabled');
+const frontMin=document.getElementById('front-min-observations');
+const frontStatus=document.getElementById('front-status');
+map.createPane('researchFrontPane');
+map.getPane('researchFrontPane').style.zIndex='680';
+let researchFrontFeatures=[],researchFrontLayer=null,frontHitLayer=null,frontDataAvailable=false;
+const strengthToggle=document.getElementById('front-strength');
+const strengthLegend=document.getElementById('front-strength-legend');
+let frontQualityData=null, frontQualityMessage='L.4 reports not configured';
+const frontStrengthReview=document.getElementById('front-strength-review');
+const frontKey=(p)=>[p.date,p.track_id,p.front_id].join('|');
+function buildStrengthLookup(reports){
+ const lookup=new Map();
+ for(const row of reports.validation){lookup.set(frontKey(row),{quality:row.quality_flag,valid:Number(row.transects_valid),sections:[]});}
+ for(const row of reports.transects){
+  const entry=lookup.get(frontKey(row));if(!entry||row.status!=='ok')continue;
+  const f=Number(row.fraction_along_front),c=Number(row.measured_f_per_10nm),width=Number(row.transition_width_nm),fraction=Number(row.central_gradient_fraction);
+  if(![f,c,width,fraction].every(Number.isFinite)||f<0||f>1||!row.measured_f_per_10nm||!row.transition_width_nm||!row.central_gradient_fraction)continue;
+  // Deliberately provisional visual thresholds, not scientific cutoffs.
+  const grade=c>=2.8&&width<=3&&fraction>=0.55?'strong':c>=2.0&&width<=5&&fraction>=0.48?'moderate':'weak';
+  entry.sections.push({fraction:f,contrast:c,width,concentration:fraction,grade});
+ }
+ for(const entry of lookup.values())entry.sections.sort((a,b)=>a.fraction-b.fraction);
+ return lookup;
+}
+function slicePolylineByFraction(coords,start,end){
+ if(coords.length<2)return [];
+ const len=[0];for(let i=1;i<coords.length;i++){
+  const a=coords[i-1],b=coords[i],meanLat=(a[0]+b[0])/2*Math.PI/180;
+  len.push(len[i-1]+Math.hypot((b[1]-a[1])*Math.cos(meanLat),b[0]-a[0]));
+ }
+ const total=len[len.length-1];if(total<=0)return coords;
+ const pos=(fraction)=>{const target=total*fraction;for(let i=1;i<len.length;i++)if(target<=len[i]){const t=(target-len[i-1])/(len[i]-len[i-1]||1);return [coords[i-1][0]+t*(coords[i][0]-coords[i-1][0]),coords[i-1][1]+t*(coords[i][1]-coords[i-1][1])];}return coords[coords.length-1]};
+ const result=[pos(start)];for(let i=1;i<coords.length-1;i++)if(len[i]>start*total&&len[i]<end*total)result.push(coords[i]);result.push(pos(end));return result;
+}
+const gradeColors={weak:'#ffffff',moderate:'#111827',strong:'#e900e9'};
+
+map.createPane('researchTransectPane');
+map.getPane('researchTransectPane').style.zIndex='690';
+map.getPane('researchTransectPane').style.pointerEvents='none';
+// Drag panels by their title bars only; controls remain clickable and content scrollable.
+function makePanelDraggable(panelId,headerId){
+ const panel=document.getElementById(panelId),header=document.getElementById(headerId);
+ if(!panel||!header)return;
+ header.classList.add('movable-panel-heading');
+ let start=null;
+ header.addEventListener('pointerdown',e=>{
+  if(e.button!==0||e.target.closest('button,input,select,a,summary'))return;
+  e.preventDefault();e.stopPropagation();
+  const r=panel.getBoundingClientRect();
+  panel.style.position='fixed';panel.style.left=r.left+'px';panel.style.top=r.top+'px';panel.style.right='auto';
+  start={id:e.pointerId,x:e.clientX,y:e.clientY,left:r.left,top:r.top};
+  header.setPointerCapture(e.pointerId);
+ });
+ header.addEventListener('pointermove',e=>{
+  if(!start||e.pointerId!==start.id)return;
+  e.preventDefault();
+  const w=panel.getBoundingClientRect().width;
+  const maxL=Math.max(0,window.innerWidth-Math.min(w,100));
+  const maxT=Math.max(0,window.innerHeight-45);
+  panel.style.left=Math.max(0,Math.min(maxL,start.left+e.clientX-start.x))+'px';
+  panel.style.top=Math.max(0,Math.min(maxT,start.top+e.clientY-start.y))+'px';
+ });
+ const finish=e=>{if(start&&(!e||e.pointerId===start.id)){try{header.releasePointerCapture(start.id);}catch(_){}start=null;}};
+ header.addEventListener('pointerup',finish);header.addEventListener('pointercancel',finish);
+ window.addEventListener('blur',()=>finish());
+}
+makePanelDraggable('info','info-title');
+makePanelDraggable('front-inspector','front-inspector-header');
+const inspector=document.getElementById('front-inspector');
+const inspectorContent=document.getElementById('front-inspector-content');
+let activeTransect=null,frontInspectionGeneration=0;
+function clearFrontTransect(){if(activeTransect){map.removeLayer(activeTransect);activeTransect=null;}}
+function closeFrontInspector(){frontInspectionGeneration++;clearFrontTransect();inspector.classList.remove('open');inspectorContent.replaceChildren();}
+document.getElementById('front-inspector-close').addEventListener('click',closeFrontInspector);
+function displayedFrontDay(){
+ if(!visibleFrame||!visibleFrame.visible)return '';
+ return String(visibleFrame.stamp||visibleFrame.day||'').slice(0,10);
+}
+function inspectResearchFront(feature,selectedLatLng,isOnDemand=false){
+ closeFrontInspector();
+ const generation=frontInspectionGeneration;
+ const p=feature.properties||{};
+ const estimatedContrast=isOnDemand?Number(p.detector_contrast_f_per_10nm):Number(p.mean_contrast_f_per_10nm);
+ const profileDay=isOnDemand?displayedFrontDay():p.date;
+ const fmt=v=>typeof v==='number'&&Number.isFinite(v)?v.toFixed(1):'n/a';
+ const root=document.createElement('div');root.className='front-inspection-body';root.style.cssText='overflow-wrap:anywhere';
+ const fields=isOnDemand?[['Type','On-demand research candidate'],['Front',p.front_id],['Date',profileDay],['Length (NM)',fmt(p.length_nm)],['Detector estimate (°F / 10 NM)',fmt(estimatedContrast)],['Status','Single-day, untracked; no independent validation']]:[['Track',p.track_id],['Front',p.front_id],['Date',p.date],['Length (NM)',fmt(p.length_nm)],['Contrast (°F / 10 NM)',fmt(estimatedContrast)],['Observed dates',p.observations],['Experimental confidence',fmt(p.experimental_confidence_score)+' / 100']];
+ for(const [label,value] of fields){
+  const line=document.createElement('div');const strong=document.createElement('strong');strong.textContent=label+': ';line.appendChild(strong);line.appendChild(document.createTextNode(String(value??'n/a')));root.appendChild(line);
+ }
+ const quality=isOnDemand?null:frontQualityData?.get(frontKey(p));
+ const diagnostics=document.createElement('div');diagnostics.className='front-profile-summary';
+ if(isOnDemand)diagnostics.textContent='Numerical profile is available for inspection. Historical persistence, L.4 quality flags, and strength grades have not been calculated for this candidate.';
+ else if(!strengthToggle.checked)diagnostics.textContent='Strength visualization: off (original magenta candidates)';
+ else if(!quality||!quality.sections.length)diagnostics.textContent='Strength: unverified (no usable L.4 transect); no weak/strong assignment.';
+ else {
+  diagnostics.textContent='L.4 quality: '+quality.quality.replaceAll('_',' ')+'. '+quality.sections.length+' measured sections.';
+  const details=document.createElement('details');details.className='front-section-details';
+  const summary=document.createElement('summary');summary.textContent='Section strengths and measurements';details.appendChild(summary);
+  const measurements=document.createElement('div');measurements.style.marginTop='5px';
+  measurements.textContent=quality.sections.map(x=>Math.round(x.fraction*100)+'%: '+x.grade+' ('+x.contrast.toFixed(2)+'°F/10 NM, '+x.width.toFixed(0)+' NM width, '+Math.round(x.concentration*100)+'% central gradient)').join(' · ');
+  details.appendChild(measurements);diagnostics.appendChild(details);
+ }
+ root.appendChild(diagnostics);
+ const methodDetails=document.createElement('details');methodDetails.className='front-map-method';
+ const methodSummary=document.createElement('summary');methodSummary.textContent='About strength colors';methodDetails.appendChild(methodSummary);
+ const interpretation=document.createElement('p');interpretation.className='front-map-qualification';interpretation.textContent='Strength colors are assigned from three measured sections (25%, 50%, 75%); intermediate line colors are visualization estimates, not continuous measurements. Quality flags are separate.';methodDetails.appendChild(interpretation);root.appendChild(methodDetails);
+ const button=document.createElement('button');button.type='button';button.textContent='Inspect 20-NM SST transect';button.style.marginTop='8px';root.appendChild(button);
+ const chart=document.createElement('div');chart.id='front-inspector-chart';root.appendChild(chart);
+ inspectorContent.appendChild(root);inspector.classList.add('open');
+ button.addEventListener('click',async()=>{
+  const poly=feature.geometry.coordinates||[];
+  const selected=selectedLatLng;
+  if(!selected||poly.length<2){chart.textContent='No front geometry available';return;}
+    let best=Infinity,a=null,b=null;
+    for(let i=1;i<poly.length;i++){
+      const x=poly[i-1],y=poly[i];if(!Array.isArray(x)||!Array.isArray(y))continue;
+      const d=Math.pow((x[0]+y[0])/2-selected.lng,2)*Math.pow(Math.cos(selected.lat*Math.PI/180),2)+Math.pow((x[1]+y[1])/2-selected.lat,2);
+      if(d<best){best=d;a=x;b=y;}
+    }
+    if(!a||!b){chart.textContent='No valid front segment';return;}
+    const tEast=(b[0]-a[0])*Math.cos(selected.lat*Math.PI/180),tNorth=b[1]-a[1];
+    const length=Math.hypot(tEast,tNorth);if(length<1e-9){chart.textContent='Degenerate front geometry';return;}
+    const east=-tNorth/length,north=tEast/length;
+    // Draw precisely the transect being sampled, including its measured endpoints.
+    clearFrontTransect();
+    const pointAt=(distance)=>[selected.lat+distance*north/60,selected.lng+distance*east/(60*Math.cos(selected.lat*Math.PI/180))];
+    activeTransect=L.layerGroup([
+      L.polyline([pointAt(-10),pointAt(10)],{pane:'researchTransectPane',color:'#111827',weight:5,opacity:.95,interactive:false}),
+      L.polyline([pointAt(-10),pointAt(10)],{pane:'researchTransectPane',color:'#fff',weight:2,opacity:1,dashArray:'7 5',interactive:false}),
+      L.circleMarker(pointAt(0),{pane:'researchTransectPane',radius:5,color:'#111827',fillColor:'#fff',fillOpacity:1,interactive:false}),
+      L.circleMarker(pointAt(-10),{pane:'researchTransectPane',radius:3,color:'#111827',fillColor:'#3d8cdd',fillOpacity:1,interactive:false}),
+      L.circleMarker(pointAt(10),{pane:'researchTransectPane',radius:3,color:'#111827',fillColor:'#e25c3d',fillOpacity:1,interactive:false})
+    ]).addTo(map);
+    chart.textContent='Sampling original NOAA SST (one bounded request)…';button.disabled=true;
+    try{
+      const q=new URLSearchParams({date:profileDay,lat:String(selected.lat),lon:String(selected.lng),east:String(east),north:String(north)});
+      const response=await fetch('/api/sst-transect?'+q);
+      if(!response.ok)throw new Error('SST unavailable (HTTP '+response.status+')');
+      const data=await response.json();if(generation!==frontInspectionGeneration)return;chart.replaceChildren();
+      const samples=data.samples||[],valid=samples.filter(v=>v.celsius!==null&&Number.isFinite(v.celsius));
+      if(valid.length<3){chart.textContent='Insufficient valid NOAA samples across this front';return;}
+      const min=Math.min(...valid.map(v=>v.celsius))-.25,max=Math.max(...valid.map(v=>v.celsius))+.25;
+      const NS='http://www.w3.org/2000/svg',svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 450 265');svg.setAttribute('width','450');svg.setAttribute('height','265');svg.setAttribute('role','img');svg.setAttribute('aria-label','Sea surface temperature in degrees Celsius and Fahrenheit versus nautical miles across selected thermal front');
+      const mk=(name,attrs)=>{const node=document.createElementNS(NS,name);Object.entries(attrs).forEach(([k,v])=>node.setAttribute(k,v));svg.appendChild(node);return node;};
+      const x0=72,x1=373,y0=34,y1=209;
+      const x=v=>x0+(v+10)*(x1-x0)/20,y=v=>y1-(v-min)*(y1-y0)/(max-min);
+      const label=(txt,xp,yp,attrs={})=>{const n=mk('text',{x:xp,y:yp,'font-size':14,fill:'#23384b',...attrs});n.textContent=txt;};
+      // Temperature grid and dual-unit tick labels; numerical samples remain Celsius.
+      for(let i=0;i<=4;i++){
+        const valueC=min+i*(max-min)/4,yp=y(valueC);
+        mk('line',{x1:x0,y1:yp,x2:x1,y2:yp,stroke:'#d4dde4','stroke-width':1});
+        label(valueC.toFixed(1)+'°',x0-9,yp+5,{'text-anchor':'end'});
+        label((valueC*9/5+32).toFixed(1)+'°',x1+9,yp+5);
+      }
+      mk('line',{x1:x0,y1:y0,x2:x0,y2:y1,stroke:'#344b62','stroke-width':1.4});
+      mk('line',{x1:x0,y1:y1,x2:x1,y2:y1,stroke:'#344b62','stroke-width':1.4});
+      mk('line',{x1:x(0),y1:y0,x2:x(0),y2:y1,stroke:'#607588','stroke-width':1.5,'stroke-dasharray':'5 5'});
+      label('SST (°C)',x0,y0-14,{'font-weight':'600'});
+      label('SST (°F)',x1+8,y0-14,{'font-weight':'600'});
+      for(const offset of [-10,-5,0,5,10]){
+        const xp=x(offset);mk('line',{x1:xp,y1:y1,x2:xp,y2:y1+5,stroke:'#344b62'});
+        label(offset===0?'0':String(offset),xp,y1+23,{'text-anchor':'middle'});
+      }
+      label('Distance across front (NM)',(x0+x1)/2,259,{'text-anchor':'middle','font-weight':'600'});
+      let path='';let hasPrevious=false;
+      for(const point of samples){if(point.celsius===null){hasPrevious=false;continue;}path+=(hasPrevious?' L':' M')+x(point.distance_nm).toFixed(1)+' '+y(point.celsius).toFixed(1);hasPrevious=true;}
+      mk('path',{d:path,fill:'none',stroke:'#1256a8','stroke-width':3});
+      for(const point of valid)mk('circle',{cx:x(point.distance_nm),cy:y(point.celsius),r:2.7,fill:'#1256a8'});
+      chart.appendChild(svg);
+      const byOffset=new Map(valid.map(pt=>[Number(pt.distance_nm),pt.celsius]));
+      const measured=byOffset.has(-5)&&byOffset.has(5)?(byOffset.get(5)-byOffset.get(-5))*9/5:null;
+      const value=document.createElement('div');value.className='front-profile-summary';
+      const fmtF=n=> (n>=0?'+':'')+n.toFixed(2)+'°F';
+      value.textContent=measured===null?'Measured central 10-NM contrast: unavailable (missing samples)':
+        'Measured central 10-NM contrast: '+fmtF(measured)+' (signed); magnitude '+Math.abs(measured).toFixed(2)+'°F.  Detector estimate: '+fmt(estimatedContrast)+'°F / 10 NM.';
+      chart.appendChild(value);
+      const coords=document.createElement('div');coords.style.cssText='font:11px ui-monospace,monospace;overflow-wrap:anywhere;margin:4px 0';
+      const lo=pointAt(-10),hi=pointAt(10);
+      coords.textContent='Transect −10 NM: '+lo[0].toFixed(4)+'°, '+lo[1].toFixed(4)+'° · +10 NM: '+hi[0].toFixed(4)+'°, '+hi[1].toFixed(4)+'°';
+      chart.appendChild(coords);
+      const summary=document.createElement('div');summary.style.fontSize='11px';summary.textContent=valid.length+'/21 valid original NOAA samples · '+data.timestamp+' · nearest-grid values (no nearshore gap-fill)';chart.appendChild(summary);
+    }catch(err){if(generation===frontInspectionGeneration)chart.textContent='Unable to inspect transect: '+err.message;}finally{if(generation===frontInspectionGeneration)button.disabled=false;}
+
+ });
+}
+function repaintResearchFronts(){
+ closeFrontInspector();
+ if(researchFrontLayer){map.removeLayer(researchFrontLayer);researchFrontLayer=null;}
+ if(frontHitLayer){map.removeLayer(frontHitLayer);frontHitLayer=null;}
+ const date=displayedFrontDay();
+ if(!frontEnabled.checked||!frontDataAvailable||!date){
+  frontStrengthReview.style.display='none';if(frontDataAvailable)frontStatus.textContent=date?'Fronts hidden':'Waiting for displayed SST';return;
+ }
+ const min=Number(frontMin.value);
+ const matches=researchFrontFeatures.filter(f=>f.properties&&f.properties.date===date&&Number(f.properties.observations||1)>=min&&f.geometry&&f.geometry.type==='LineString');
+ if(strengthToggle.checked&&frontQualityData){
+  const totals={weak:0,moderate:0,strong:0,unverified:0,review:0};
+  for(const feature of matches){const q=frontQualityData.get(frontKey(feature.properties));
+    if(!q||!q.sections.length){totals.unverified++;continue;}
+    for(const section of q.sections)totals[section.grade]++;
+    if(q.quality!=='no_diagnostic_flags')totals.review++;
+  }
+  frontStrengthReview.style.display='block';
+  frontStrengthReview.textContent='Displayed date '+date+': '+totals.weak+' weak · '+totals.moderate+' moderate · '+totals.strong+' strong measured sections; '+totals.unverified+' unverified fronts; '+totals.review+' quality-review fronts. Thresholds (experimental): strong ≥2.8°F/10 NM, width ≤3 NM, center fraction ≥55%; moderate ≥2.0°F/10 NM, width ≤5 NM, center fraction ≥48%; else weak.';
+ }else{frontStrengthReview.style.display='none';}
+ researchFrontLayer=L.layerGroup();
+ for(const feature of matches){
+  const coords=feature.geometry.coordinates.map(c=>[c[1],c[0]]);
+  if(coords.length<2)continue;
+  const quality=frontQualityData?.get(frontKey(feature.properties));
+  if(!strengthToggle.checked){L.polyline(coords,{pane:'researchFrontPane',color:'#ed00ed',weight:3,opacity:1,interactive:false}).addTo(researchFrontLayer);continue;}
+  if(!quality||!quality.sections.length){
+   L.polyline(coords,{pane:'researchFrontPane',color:'#737e87',weight:4,dashArray:'6 7',interactive:false}).addTo(researchFrontLayer);continue;
+  }
+  const parts=quality.sections;
+  for(let i=0;i<parts.length;i++){
+   const left=i===0?0:(parts[i-1].fraction+parts[i].fraction)/2;
+   const right=i===parts.length-1?1:(parts[i].fraction+parts[i+1].fraction)/2;
+   const sliced=slicePolylineByFraction(coords,left,right);
+   const color=gradeColors[parts[i].grade];
+   // Dark underlay keeps white and black lines visible over bright SST and land.
+   L.polyline(sliced,{pane:'researchFrontPane',color:color==='#ffffff'?'#314155':'#ffffff',weight:6.5,opacity:.95,interactive:false}).addTo(researchFrontLayer);
+   L.polyline(sliced,{pane:'researchFrontPane',color,weight:3.5,opacity:1,interactive:false}).addTo(researchFrontLayer);
+  }
+  if(quality.quality!=='no_diagnostic_flags'){
+   L.polyline(coords,{pane:'researchFrontPane',color:'#ed8b18',weight:8,opacity:.85,dashArray:'1 13',interactive:false}).addTo(researchFrontLayer);
+  }
+ }
+ researchFrontLayer.addTo(map);
+ // Transparent wide strokes accept clicks without changing the displayed magenta strokes.
+ frontHitLayer=L.layerGroup();
+ for(const feature of matches){
+  const coords=feature.geometry.coordinates.map(c=>[c[1],c[0]]);
+  const hit=L.polyline(coords,{pane:'researchFrontPane',color:'#ed00ed',weight:20,opacity:0.005,interactive:true,bubblingMouseEvents:false});
+  hit.on('click',event=>inspectResearchFront(feature,event.latlng));
+  frontHitLayer.addLayer(hit);
+ }
+ frontHitLayer.addTo(map);
+ frontStatus.textContent=date+' · '+matches.length+' candidates'+(strengthToggle.checked?' · experimental strength':' · original styling')+(matches.length===0?' (no observations for this date/filter)':'');
+}
+frontEnabled.addEventListener('change',repaintResearchFronts);
+frontMin.addEventListener('change',repaintResearchFronts);
+strengthToggle.addEventListener('change',()=>{strengthLegend.style.display=strengthToggle.checked?'block':'none';repaintResearchFronts();});
+fetch('/api/front-strength-data',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('L.4 reports unavailable');return r.json()}).then(reports=>{
+ frontQualityData=buildStrengthLookup(reports);frontQualityMessage='L.4 reports loaded';strengthToggle.disabled=false;strengthToggle.checked=true;strengthLegend.style.display='block';repaintResearchFronts();
+}).catch(()=>{frontQualityMessage='No L.4 reports (set FRONT_VALIDATION_DIR)';strengthToggle.disabled=true;strengthToggle.checked=false;strengthLegend.style.display='none';});
+fetch('/api/research-fronts',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('No local GeoJSON configured');return r.json()}).then(fc=>{
+ if(fc.type!=='FeatureCollection'||!Array.isArray(fc.features))throw new Error('Invalid front GeoJSON');
+ researchFrontFeatures=fc.features;frontDataAvailable=true;frontEnabled.disabled=false;
+ frontStatus.textContent=fc.features.length+' research observations available · enable to inspect';
+ repaintResearchFronts();
+}).catch(()=>{frontEnabled.disabled=true;frontStatus.textContent='No local research GeoJSON. Set FRONT_GEOJSON and restart.';});
+
 let failures=0,required=0,skipped=0;
 const maxConcurrent=3;
 const progressText=document.getElementById('load-progress');
@@ -221,14 +768,14 @@ showLoadOutlines.addEventListener('change',()=>{if(!showLoadOutlines.checked)loa
 function utcDayOffset(day,offset){const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+offset);return d.toISOString().slice(0,10)}
 function targetDay(){return appliedDay||latestAnalysisDay||'latest'}
 function stagedDay(){return selectedDay||latestAnalysisDay||'latest'}
-function receiveSSTTimestamp(stamp){if(!stamp||stamp==='unavailable')return;const day=stamp.slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return;if(!latestAnalysisDay){latestAnalysisDay=day;timeSlider.disabled=false;updateTimeLabel();}}
+function receiveSSTTimestamp(stamp){if(!stamp||stamp==='unavailable')return;const day=stamp.slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return;if(!latestAnalysisDay){latestAnalysisDay=day;timeSlider.disabled=false;const restoreDay=startupSession?.day;if(restoreDay){const delta=Math.round((Date.parse(day+'T12:00:00Z')-Date.parse(restoreDay+'T12:00:00Z'))/86400000);if(delta>=0&&delta<=29)timeSlider.value=29-delta;}updateTimeLabel();}}
 function updateTimeLabel(){const day=stagedDay();timeLabel.textContent=day==='latest'?'Finding latest NOAA analysis…':'Selected: '+day;renderButton.disabled=!latestAnalysisDay||!toggle.checked;displayedLabel.textContent='Displayed: '+(visibleFrame?(visibleFrame.stamp||visibleFrame.day||targetDay()):'none')+(day!==targetDay()?' · selection not rendered':'');}
 function cancelPending(){if(frameController){frameController.abort();frameController=null;}clearLoading();}
 function disposeFrame(frame){if(frame.hiddenPrior&&visibleFrame&&frame!==visibleFrame)for(const prior of frame.hiddenPrior){if(prior.layer&&!map.hasLayer(prior.layer)){prior.layer.addTo(map);applyIntensity(prior.layer);}}if(frame.visible)for(const r of frame.tiles){if(r.layer)map.removeLayer(r.layer);if(r.edge)map.removeLayer(r.edge);}frame.visible=false;for(const r of frame.tiles)if(r.url)URL.revokeObjectURL(r.url);}
 function hideFrame(frame){if(!frame||!frame.visible)return;for(const r of frame.tiles){if(r.layer)map.removeLayer(r.layer);if(r.edge)map.removeLayer(r.edge);}frame.visible=false;}
 function showFrame(frame){if(!frame || visibleFrame===frame&&frame.visible)return;for(const r of frame.tiles){if(r.layer){r.layer.addTo(map);applyIntensity(r.layer);}if(r.edge&&document.getElementById('mask-edge').checked)r.edge.addTo(map);}
- if(document.getElementById('mask-edge').checked)for(const r of frame.tiles){if(!r.blob||r.edge)continue;vectorAlphaEdge(r.blob,r.bounds).then(edge=>{if(!edge)return;r.edge=edge;if(frame===visibleFrame)edge.addTo(map);}).catch(e=>console.warn('Mask edge unavailable',e));}const previous=visibleFrame;visibleFrame=frame;frame.visible=true;if(previous&&previous!==frame)hideFrame(previous);frame.hiddenPrior=null;frameCache.delete(frame.key);frameCache.set(frame.key,frame);while(frameCache.size>maxFrames){const oldKey=frameCache.keys().next().value;const old=frameCache.get(oldKey);if(old===visibleFrame)break;frameCache.delete(oldKey);disposeFrame(old);}updateTimeLabel();updateFrameStatus('Buffered · '+frame.tiles.filter(t=>t.layer).length+' tiles');}
-function clear(){cancelPending();viewGeneration++;for(const f of frameCache.values())disposeFrame(f);frameCache.clear();visibleFrame=null;desiredFrameKey='';gridRecords=[];renderGrid();updateTimeLabel();}
+ if(document.getElementById('mask-edge').checked)for(const r of frame.tiles){if(!r.blob||r.edge)continue;vectorAlphaEdge(r.blob,r.bounds).then(edge=>{if(!edge)return;r.edge=edge;if(frame===visibleFrame)edge.addTo(map);}).catch(e=>console.warn('Mask edge unavailable',e));}const previous=visibleFrame;visibleFrame=frame;frame.visible=true;if(previous&&previous!==frame)hideFrame(previous);frame.hiddenPrior=null;frameCache.delete(frame.key);frameCache.set(frame.key,frame);while(frameCache.size>maxFrames){const oldKey=frameCache.keys().next().value;const old=frameCache.get(oldKey);if(old===visibleFrame)break;frameCache.delete(oldKey);disposeFrame(old);}updateTimeLabel();repaintResearchFronts();updateFrameStatus('Buffered · '+frame.tiles.filter(t=>t.layer).length+' tiles');}
+function clear(){cancelPending();viewGeneration++;for(const f of frameCache.values())disposeFrame(f);frameCache.clear();visibleFrame=null;desiredFrameKey='';gridRecords=[];renderGrid();updateTimeLabel();repaintResearchFronts();}
 function updateFrameStatus(message){status.textContent='SST: '+message+' · '+frameCache.size+' frames buffered';legend.style.display=visibleFrame?'block':'none';}
 timeSlider.addEventListener('input',()=>{if(!latestAnalysisDay)return;const index=Number(timeSlider.value);selectedDay=index===29?'':utcDayOffset(latestAnalysisDay,index-29);updateTimeLabel();});
 document.getElementById('time-latest').addEventListener('click',()=>{if(!latestAnalysisDay)return;timeSlider.value='29';selectedDay='';updateTimeLabel();});
@@ -423,5 +970,29 @@ map.on('mousemove',e=>{
  },850);
 });
 map.on('mouseout',()=>{if(cursorTimer)clearTimeout(cursorTimer);if(cursorRequest)cursorRequest.abort();cursorLabel.textContent='Move cursor over SST to inspect temperature';});
+function restoreSession(v){
+ if(!v)return;
+ applyMapView(v.map);
+ if(v.intensity&&['natural','vivid','high'].includes(v.intensity)){const intensity=document.getElementById('sst-intensity');intensity.value=v.intensity;intensity.dispatchEvent(new Event('change'));}
+ if(v.area&&Object.values(v.area).every(Number.isFinite)&&v.area.north>v.area.south&&v.area.east>v.area.west){
+  const a=v.area;const span=Math.max(a.north-a.south,a.east-a.west);
+  boxSize=Math.max(BOX_MIN,Math.min(BOX_MAX,span));boxHalf=boxSize/2;
+  savedBoxCenter=L.latLng((a.north+a.south)/2,(a.east+a.west)/2);
+  selectedArea=L.latLngBounds([[a.south,a.west],[a.north,a.east]]);
+  hideDetectionBox();
+ }
+ if(v.day){
+  selectedDay=v.day;appliedDay=v.day;
+  if(latestAnalysisDay){const days=Math.round((Date.parse(latestAnalysisDay+'T12:00:00Z')-Date.parse(v.day+'T12:00:00Z'))/86400000);if(days>=0&&days<=29)timeSlider.value=29-days;}
+  updateTimeLabel();refresh(false);
+ }
+ if(v.historical&&frontEnabled&&!frontEnabled.disabled){frontEnabled.checked=true;repaintResearchFronts();}
+ if(v.strength&&strengthToggle&&!strengthToggle.disabled){strengthToggle.checked=true;repaintResearchFronts();}
+ restoreOnDemandPayload(v.fronts);
+}
+let startupRestored=false;
+function restoreStartupSession(){if(startupRestored||!startupSession)return;startupRestored=true;restoreSession(startupSession);}
+
 map.whenReady(()=>setTimeout(()=>{if(toggle.checked&&!visibleFrame&&!frameController)refresh(false);},400));
+map.whenReady(()=>setTimeout(restoreStartupSession,650));
 </script></body></html>

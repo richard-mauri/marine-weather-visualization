@@ -257,3 +257,29 @@ The first SST request starts automatically after map initialization, without wai
 ## v0.4.20
 
 The Details button now sits beside Render SST. Natural, Vivid and High contrast only adjust browser display styling, not numerical SST values. As incoming tiles are drawn, matching previous-date tiles are hidden to prevent alpha blending and restored on request failure. A throttled /api/sst-sample numerical NOAA grid lookup supplies the map-corner cursor readout; this nearest-grid sample is distinct from nearshore display estimates and may be unavailable over land or during NOAA outages.
+
+
+---
+
+## Consolidation development handoff — October 12, 2026
+
+**Current source:** N.2.8 thermal front integration candidate based on the stable v0.4.20 marine-weather application. The original stable Git commit `57e2d0e` remains the rollback point. This candidate is applied to a temporary `integration-n28` branch in `~/marine-weather-visualization`; do not tag a public release until verified in Safari. Branch `front-integration` points to accepted experiment N.2.7 (`c74c746`, tag `v0.4.20-N.2.7`). N.2.8 has not been accepted or tagged.
+
+**Git layout:** A single Git repository, remote `https://github.com/richard-mauri/marine-weather-visualization`, stable worktree `~/marine-weather-visualization`, experimental worktree `~/marine-front-integration`. Git 2.18 on macOS. No additional repositories. The experimental worktree can be retired with `git worktree remove` once the consolidated main application is validated and the old development branch is no longer needed. Keep it until then. The original standalone experiment is archived at `~/marine-archives/front-integration-N2.7-original.tar.gz`.
+
+**Launch:** Run from the checked-out application's root directory with
+
+```sh
+FRONT_CACHE_DIR="$HOME/marine-sst-cache" \
+FRONT_GEOJSON="$HOME/marine-weather-visualization/experiment/front-research-baja-h2/front-tracks.geojson" \
+FRONT_VALIDATION_DIR="$PWD/experiment/front-validation-L4" \
+go run ./cmd/prototype
+```
+
+Browse to `http://127.0.0.1:8081`. The application uses Leaflet and NOAA/ERDDAP numerical JPL MUR SST. Stop any existing server on 8081 before starting another. Persistent disk cache lives outside Git at `~/marine-sst-cache` and must not be deleted during upgrades.
+
+**Implemented experimental features:** SST geographic raster with land masking, NOAA per-client Allow NOAA / Cache Only option, persistent numerical disk caching, partial tile rendering across pans, Save Session / auto restore of map/date/fronts, nautical mile scale, Standard and Exploratory thermal-front sensitivity, numerical transects and front inspectors, historical Baja research observations, and N.2.8 tile-failure diagnostics / retry button / exact duplicate suppression. Browser-saved session state is local to each origin.
+
+**User-verified results:** N.2.4 Cache Only panning preserves present tiles while uncached areas remain blank. N.2.2+ session restored date, front geometry, map center, zoom after server restart. N.2.7 changing sensitivity triggers detections rapidly. On October 8, 2026, same area Standard: 21 paths, 203.9 NM; Exploratory: 106 paths, 851.1 NM; both 16 of 25 numerical tiles. In N.2.8 the 9 missing tiles are diagnosed as insufficient numerical SST data, and retry reproduced the same 16/25 and 106 paths. These incomplete tiles may involve land masking or tile acceptance and are not proved NOAA outages. Exploratory results are research candidates, not independently validated physical fronts.
+
+**Next steps:** Validate consolidation in Safari before promoting `integration-n28` to `main`. No unqualified `git merge` of the unrelated-root `front-integration` branch; the ZIP delivers the source-tree changes explicitly. Later consider cautious cross-tile stitching and distinguishing land-dominated gaps from ocean coverage gaps, but the user prefers finishing front work promptly and moving on to other marine weather capabilities. Preserve existing cache, stable Git tag, and other unrelated projects/services. Update this README with the accepted release details after promotion.

@@ -13,6 +13,7 @@ import (
 )
 
 func TestCacheCoalescingAndStale(t *testing.T) {
+	t.Setenv("FRONT_CACHE_DIR", t.TempDir())
 	var calls atomic.Int32
 	var fail atomic.Bool
 	c := newGridStore(func(ctx context.Context, b geo.Bounds) (sst.Grid, error) {
@@ -57,6 +58,7 @@ func TestNearbyViewUsesSameBucket(t *testing.T) {
 }
 
 func TestCooldownAndCounters(t *testing.T) {
+	t.Setenv("FRONT_CACHE_DIR", t.TempDir())
 	var calls atomic.Int32
 	c := newGridStore(func(ctx context.Context, b geo.Bounds) (sst.Grid, error) {
 		calls.Add(1)
@@ -78,6 +80,7 @@ func TestCooldownAndCounters(t *testing.T) {
 }
 
 func TestDatedCacheIsolation(t *testing.T) {
+	t.Setenv("FRONT_CACHE_DIR", t.TempDir())
 	var count atomic.Int32
 	c := newGridStore(func(ctx context.Context, b geo.Bounds) (sst.Grid, error) {
 		count.Add(1)
@@ -93,5 +96,27 @@ func TestDatedCacheIsolation(t *testing.T) {
 	}
 	if count.Load() != 2 {
 		t.Fatalf("upstream calls=%d want 2", count.Load())
+	}
+}
+
+func TestClientCacheOnlyAndDiskRestart(t *testing.T) {
+	t.Setenv("FRONT_CACHE_DIR", t.TempDir())
+	b := geo.Bounds{West: -125.1, South: 34.1, East: -124.7, North: 34.5}
+	var calls atomic.Int32
+	fetch := func(ctx context.Context, b geo.Bounds) (sst.Grid, error) {
+		calls.Add(1)
+		return sst.Grid{Timestamp: "2026-10-02", Points: []sst.Point{{Lat: 34.3, Lon: -124.9, Temp: 17}}}, nil
+	}
+	restricted := context.WithValue(context.Background(), cacheOnlyContextKey{}, true)
+	first := newGridStore(fetch)
+	if _, state, err := first.getDated(restricted, b, false, "2026-10-02"); err == nil || state != "NOT-CACHED" || calls.Load() != 0 {
+		t.Fatalf("cache only miss state=%s err=%v calls=%d", state, err, calls.Load())
+	}
+	if _, state, err := first.getDated(context.Background(), b, false, "2026-10-02"); err != nil || state != "MISS" || calls.Load() != 1 {
+		t.Fatalf("initial fetch state=%s err=%v calls=%d", state, err, calls.Load())
+	}
+	restarted := newGridStore(fetch)
+	if grid, state, err := restarted.getDated(restricted, b, false, "2026-10-02"); err != nil || state != "DISK-HIT" || calls.Load() != 1 || len(grid.Points) != 1 {
+		t.Fatalf("disk restart state=%s err=%v calls=%d", state, err, calls.Load())
 	}
 }

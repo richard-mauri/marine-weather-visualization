@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -11,6 +12,7 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
+	"io"
 	"log"
 	"math"
 	"math/rand"
@@ -29,7 +31,7 @@ import (
 //go:embed index.html leaflet-local.css coastline.geojson
 var content embed.FS
 
-const version = "0.4.20"
+const version = "0.4.20-N.2.4"
 
 var diagnosticGeoJSON []byte
 var shorelineGeoJSON []byte
@@ -41,6 +43,15 @@ func validAnalysisDate(day string) bool {
 	}
 	d, e := time.Parse("2006-01-02", day)
 	return e == nil && d.Format("2006-01-02") == day && !d.After(time.Now().UTC().Add(24*time.Hour))
+}
+
+func finiteTransect(values ...float64) bool {
+	for _, v := range values {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return false
+		}
+	}
+	return true
 }
 
 func validTileSpan(span int) bool {
@@ -97,6 +108,32 @@ func bucketBounds(b geo.Bounds) geo.Bounds {
 }
 
 type dateContextKey struct{}
+type cacheOnlyContextKey struct{}
+
+func clientSSTContext(r *http.Request) context.Context {
+	if r.URL.Query().Get("sst_network") == "cache" {
+		return context.WithValue(r.Context(), cacheOnlyContextKey{}, true)
+	}
+	return r.Context()
+}
+func cacheOnly(ctx context.Context) bool { return ctx.Value(cacheOnlyContextKey{}) == true }
+func gridDiskKey(key string) string      { return "display-grid-v1:" + key }
+func readDisplayGrid(key string) (sst.Grid, bool) {
+	path := cacheFile("display-sst", gridDiskKey(key))
+	info, err := os.Stat(path)
+	if err != nil || time.Since(info.ModTime()) > 14*24*time.Hour {
+		return sst.Grid{}, false
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return sst.Grid{}, false
+	}
+	var grid sst.Grid
+	if json.Unmarshal(raw, &grid) != nil || len(grid.Points) == 0 {
+		return sst.Grid{}, false
+	}
+	return grid, true
+}
 
 func (c *gridStore) get(ctx context.Context, b geo.Bounds, force bool) (sst.Grid, string, error) {
 	return c.getDated(ctx, b, force, "")
@@ -114,6 +151,15 @@ func (c *gridStore) getDated(ctx context.Context, b geo.Bounds, force bool, day 
 		c.hits++
 		c.mu.Unlock()
 		return old.grid, "HIT", nil
+	}
+	// Disk lookup precedes any upstream request. Cache-only clients can consume
+	// files written by any other client, including after a server restart.
+	if !force || cacheOnly(ctx) {
+		if grid, ok := readDisplayGrid(key); ok {
+			c.entries[key] = gridEntry{grid, time.Now()}
+			c.mu.Unlock()
+			return grid, "DISK-HIT", nil
+		}
 	}
 	if f, ok := c.flights[key]; ok {
 		c.coalesced++
@@ -133,6 +179,11 @@ func (c *gridStore) getDated(ctx context.Context, b geo.Bounds, force bool, day 
 			return old.grid, "STALE", nil
 		}
 		return sst.Grid{}, "", f.err
+	}
+	// Reject missing data before allocating an upstream flight or slot.
+	if cacheOnly(ctx) {
+		c.mu.Unlock()
+		return sst.Grid{}, "NOT-CACHED", fmt.Errorf("SST not cached; this browser is in Cache Only mode")
 	}
 	if until, ok := c.cooldown[key]; ok && time.Now().Before(until) {
 		if has {
@@ -197,6 +248,8 @@ func (c *gridStore) getDated(ctx context.Context, b geo.Bounds, force bool, day 
 	if f.err == nil {
 		delete(c.cooldown, key)
 		c.entries[key] = gridEntry{f.grid, time.Now()}
+		// Persistent numerical grid cache, shared across all clients.
+		// Write after unlocking to avoid blocking unrelated requests.
 	} else if transientERDDAP(f.err) {
 		c.failures++
 		c.cooldown[key] = time.Now().Add(20 * time.Second)
@@ -220,6 +273,9 @@ func (c *gridStore) getDated(ctx context.Context, b geo.Bounds, force bool, day 
 		delete(c.entries, oldest)
 	}
 	c.mu.Unlock()
+	if f.err == nil {
+		writeAtomically(cacheFile("display-sst", gridDiskKey(key)), f.grid)
+	}
 	if f.err != nil {
 		if has {
 			c.mu.Lock()
@@ -265,6 +321,98 @@ func handlerWithMask(endpoint string, client *http.Client, mask *sst.LandMask) h
 		return sst.FetchGridAt(ctx, client, endpoint, b, 180, day)
 	})
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/detect-fronts", newFrontRequestCache().serve(store))
+	// Research integration: front observations are loaded from an explicit local
+	// GeoJSON file. Never synthesize observations or call NOAA for front lines.
+	mux.HandleFunc("/api/research-fronts", func(w http.ResponseWriter, r *http.Request) {
+		path := os.Getenv("FRONT_GEOJSON")
+		if path == "" {
+			http.Error(w, "Set FRONT_GEOJSON to the local research front-tracks.geojson", http.StatusNotFound)
+			return
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			http.Error(w, "Research front GeoJSON unavailable", http.StatusNotFound)
+			return
+		}
+		defer file.Close()
+		data, err := io.ReadAll(io.LimitReader(file, 8<<20+1))
+		if err != nil || len(data) > 8<<20 {
+			http.Error(w, "Invalid or oversized front GeoJSON", http.StatusBadRequest)
+			return
+		}
+		var fc struct {
+			Type     string            `json:"type"`
+			Features []json.RawMessage `json:"features"`
+		}
+		if json.Unmarshal(data, &fc) != nil || fc.Type != "FeatureCollection" {
+			http.Error(w, "Expected a GeoJSON FeatureCollection", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/geo+json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Write(data)
+	})
+
+	// Milestone M: strictly local L.4 reports. No live NOAA request to color fronts.
+	mux.HandleFunc("/api/front-strength-data", func(w http.ResponseWriter, r *http.Request) {
+		directory := os.Getenv("FRONT_VALIDATION_DIR")
+		if directory == "" {
+			http.Error(w, "Set FRONT_VALIDATION_DIR to the L.4 batch-validation folder", http.StatusNotFound)
+			return
+		}
+		result := make(map[string][]map[string]string)
+		for _, name := range []string{"validation", "transects"} {
+			file, err := os.Open(filepath.Join(directory, name+".csv"))
+			if err != nil {
+				http.Error(w, "Missing L.4 "+name+" CSV", http.StatusNotFound)
+				return
+			}
+			rows, err := csv.NewReader(io.LimitReader(file, 4<<20)).ReadAll()
+			file.Close()
+			if err != nil || len(rows) < 2 {
+				http.Error(w, "Invalid L.4 CSV", http.StatusBadRequest)
+				return
+			}
+			head := rows[0]
+			var required []string
+			if name == "validation" {
+				required = []string{"date", "track_id", "front_id", "quality_flag", "transects_valid"}
+			} else {
+				required = []string{"date", "track_id", "front_id", "fraction_along_front", "measured_f_per_10nm", "transition_width_nm", "central_gradient_fraction", "status"}
+			}
+			for _, key := range required {
+				found := false
+				for _, col := range head {
+					if col == key {
+						found = true
+						break
+					}
+				}
+				if !found {
+					http.Error(w, "Not an L.4 report: missing "+key, http.StatusBadRequest)
+					return
+				}
+			}
+			entries := make([]map[string]string, 0, len(rows)-1)
+			for _, row := range rows[1:] {
+				if len(row) != len(head) {
+					http.Error(w, "Inconsistent L.4 report columns", http.StatusBadRequest)
+					return
+				}
+				obj := make(map[string]string, len(head))
+				for i, key := range head {
+					obj[key] = row[i]
+				}
+				entries = append(entries, obj)
+			}
+			result[name] = entries
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(result)
+	})
+
 	mux.HandleFunc("/api/sst-cache/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
@@ -333,7 +481,7 @@ func handlerWithMask(endpoint string, client *http.Client, mask *sst.LandMask) h
 			http.Error(w, "invalid SST analysis date", http.StatusBadRequest)
 			return
 		}
-		grid, cacheState, err := store.getDated(r.Context(), b, q.Get("refresh") == "1", day)
+		grid, cacheState, err := store.getDated(clientSSTContext(r), b, q.Get("refresh") == "1", day)
 		if err != nil {
 			http.Error(w, "numerical SST unavailable: "+err.Error(), 502)
 			return
@@ -411,11 +559,19 @@ func handlerWithMask(endpoint string, client *http.Client, mask *sst.LandMask) h
 			left := int(math.Round((cursor - west) / (east - west) * float64(pixels)))
 			right := int(math.Round((segmentEnd - west) / (east - west) * float64(pixels)))
 			if right > left {
-				grid, state, fetchErr := store.getDated(r.Context(), dataBounds, q.Get("refresh") == "1", day)
+				grid, state, fetchErr := store.getDated(clientSSTContext(r), dataBounds, q.Get("refresh") == "1", day)
 				if fetchErr != nil {
 					// Browser navigation or date changes intentionally cancel obsolete tile requests.
 					// Do not log these as upstream failures or return a misleading 502.
 					if errors.Is(fetchErr, context.Canceled) || errors.Is(r.Context().Err(), context.Canceled) {
+						return
+					}
+					if cacheOnly(clientSSTContext(r)) && state == "NOT-CACHED" {
+						// Missing data in Cache Only mode is normal coverage information,
+						// not an upstream failure. Do not spam the server log.
+						w.Header().Set("X-SST-Cache", "NOT-CACHED")
+						w.Header().Set("X-SST-No-Coverage", "cache-miss")
+						w.WriteHeader(http.StatusNoContent)
 						return
 					}
 					if !strings.Contains(fetchErr.Error(), "no valid numerical SST samples") {
@@ -458,6 +614,69 @@ func handlerWithMask(endpoint string, client *http.Client, mask *sst.LandMask) h
 		w.Header().Set("X-SST-Cache", cacheState)
 		_, _ = w.Write(buf.Bytes())
 	})
+	mux.HandleFunc("/api/sst-transect", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		lat, e1 := strconv.ParseFloat(q.Get("lat"), 64)
+		lon, e2 := strconv.ParseFloat(q.Get("lon"), 64)
+		east, e3 := strconv.ParseFloat(q.Get("east"), 64)
+		north, e4 := strconv.ParseFloat(q.Get("north"), 64)
+		day := q.Get("date")
+		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || !finiteTransect(lat, lon, east, north) || !validAnalysisDate(day) || day == "" {
+			http.Error(w, "invalid transect parameters", 400)
+			return
+		}
+		norm := math.Hypot(east, north)
+		if norm < 0.9 || norm > 1.1 || math.Abs(lat) > 82 || math.Abs(lon) > 179 {
+			http.Error(w, "invalid transect vector", 400)
+			return
+		}
+		east /= norm
+		north /= norm
+		// One upstream numerical-grid request for a 20-NM transect.
+		// Preserve missing observations; never substitute display gap-fill.
+		const halfNM = 10.0
+		dLat := halfNM / 60.0
+		dLon := halfNM / (60.0 * math.Cos(lat*math.Pi/180))
+		b := geo.Bounds{South: lat - dLat - 0.025, North: lat + dLat + 0.025, West: lon - dLon - 0.025, East: lon + dLon + 0.025}
+		if b.West < -179.99 || b.East > 179.99 || b.South < -85 || b.North > 85 {
+			http.Error(w, "transect outside data domain", 400)
+			return
+		}
+		grid, _, err := store.getDated(clientSSTContext(r), b, false, day)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(r.Context().Err(), context.Canceled) {
+				return
+			}
+			http.Error(w, "transect SST unavailable", 503)
+			return
+		}
+		type sample struct {
+			DistanceNM float64  `json:"distance_nm"`
+			Celsius    *float64 `json:"celsius"`
+		}
+		points := make([]sample, 0, 21)
+		for i := -10; i <= 10; i++ {
+			distance := float64(i)
+			y := lat + distance*north/60
+			x := lon + distance*east/(60*math.Cos(lat*math.Pi/180))
+			closest := math.MaxFloat64
+			var temp *float64
+			for _, pt := range grid.Points {
+				separation := math.Hypot((pt.Lat - y), (pt.Lon-x)*math.Cos(y*math.Pi/180))
+				if separation < closest {
+					closest = separation
+					v := pt.Temp
+					temp = &v
+				}
+			}
+			if closest > 0.016 {
+				temp = nil
+			}
+			points = append(points, sample{DistanceNM: distance, Celsius: temp})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"samples": points, "timestamp": grid.Timestamp, "date": day, "center_lat": lat, "center_lon": lon, "method": "nearest_original_noaa_grid_sample", "sample_spacing_nm": 1})
+	})
 	mux.HandleFunc("/api/sst-sample", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		lat, e1 := strconv.ParseFloat(q.Get("lat"), 64)
@@ -482,7 +701,7 @@ func handlerWithMask(endpoint string, client *http.Client, mask *sst.LandMask) h
 			_ = json.NewEncoder(w).Encode(map[string]any{"available": false})
 			return
 		}
-		grid, _, err := store.getDated(r.Context(), geo.Bounds{West: west, East: east, South: south, North: north}, false, day)
+		grid, _, err := store.getDated(clientSSTContext(r), geo.Bounds{West: west, East: east, South: south, North: north}, false, day)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(r.Context().Err(), context.Canceled) {
 				return
@@ -538,7 +757,7 @@ func handlerWithMask(endpoint string, client *http.Client, mask *sst.LandMask) h
 			http.Error(w, "invalid SST analysis date", http.StatusBadRequest)
 			return
 		}
-		grid, cacheState, err := store.getDated(r.Context(), b, false, day)
+		grid, cacheState, err := store.getDated(clientSSTContext(r), b, false, day)
 		if err != nil {
 			http.Error(w, err.Error(), 502)
 			return
