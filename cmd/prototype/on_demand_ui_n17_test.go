@@ -11,7 +11,7 @@ func TestSelectAreaAlwaysUsesCurrentViewport(t *testing.T) {
   b,err:=os.ReadFile(filename);if err!=nil{t.Fatal(err)}
   s:=string(b)
   required:=[]string{
-   "v0.4.20-N.2",
+   "v0.5.0",
    "let selectionMapNavigating=false, selectionViewportPoint=null;",
    "const viewportCenter=map.getCenter();",
    "savedBoxCenter=L.latLng(viewportCenter.lat,viewportCenter.lng);",

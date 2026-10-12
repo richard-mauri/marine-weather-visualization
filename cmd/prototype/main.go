@@ -31,7 +31,7 @@ import (
 //go:embed index.html leaflet-local.css coastline.geojson
 var content embed.FS
 
-const version = "0.4.20-N.2.4"
+const version = "0.5.0"
 
 var diagnosticGeoJSON []byte
 var shorelineGeoJSON []byte

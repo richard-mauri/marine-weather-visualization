@@ -13,7 +13,7 @@ func TestN13OnDemandInspectorAndDragHandle(t *testing.T) {
 	}
 	s := string(data)
 	for _, fragment := range []string{
-		"v0.4.20-N.2",
+		"v0.5.0",
 		"Show historical Baja research fronts",
 		"wireSelectionControl(el,kind)",
 		"el.setPointerCapture(pointer)",
